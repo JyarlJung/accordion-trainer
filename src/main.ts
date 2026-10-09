@@ -9,7 +9,7 @@ import { Judge } from './core/judge';
 import { MidiIO } from './io/midi';
 import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, setVolume, type NoteSink } from './io/audio';
 import { userSampleSets } from './io/sampleSets';
-import { getPref, persist, setPref } from './io/prefs';
+import { getPref, persist, resetPrefs, setPref } from './io/prefs';
 import { Stage } from './view/stage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -171,6 +171,11 @@ ui.transpose.onchange = () => {
   if (!options) return;
   options.transpose = Number(ui.transpose.value);
   rebuild();
+};
+$<HTMLButtonElement>('resetPrefs').onclick = () => {
+  if (!confirm('저장된 설정을 모두 지우고 기본값으로 다시 시작할까요?')) return;
+  resetPrefs();
+  location.reload();
 };
 ui.settingsBtn.onclick = () => {
   ui.settings.hidden = !ui.settings.hidden;

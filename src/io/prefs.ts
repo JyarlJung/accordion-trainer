@@ -27,6 +27,14 @@ export function setPref(key: string, value: Value): void {
   }
 }
 
+export function resetPrefs(): void {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // Nothing stored to clear.
+  }
+}
+
 // Restores a control's saved value and saves it again whenever the user changes it.
 // `apply` runs after restoring so dependent state (labels, volume, channels) catches up.
 export function persist(el: HTMLInputElement | HTMLSelectElement, key: string, apply?: () => void): void {

@@ -43,6 +43,7 @@ body.collapsed #toolbarBody { display: none; }
 .transport #seek { flex: 1 1 50%; width: auto; min-width: 120px; max-width: 50%; }
 .spacer { flex: 1; }
 #play { min-width: 56px; font-size: 15px; }
+#settingsBtn { font-size: 15px; padding: 1px 8px; }
 
 .muted { color: var(--muted); }
 .mono { font-variant-numeric: tabular-nums; }
