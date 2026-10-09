@@ -158,12 +158,32 @@ export class SamplerSink implements NoteSink {
 }
 
 // Sends the song to a MIDI output (e.g. back to the accordion to use its own sound).
+// V-Accordion reed sounds take their loudness from the bellows (CC11 Expression), so a note
+// arriving with no bellows value is silent. The sink sends its own bellows level unless the
+// player's real bellows (echoed by soft thru) moved within the last second.
 export class MidiOutSink implements NoteSink {
   private readonly on = new Set<number>();
 
-  constructor(private readonly io: MidiIO, private readonly channel: number) {}
+  constructor(private readonly io: MidiIO, private readonly channel: number, private level: number) {}
+
+  // Bellows level, 0..1 (follows the volume slider). Resent before playing in case the
+  // instrument was reset in between.
+  setLevel(level: number): void {
+    this.level = level;
+    if (this.playerBellows()) return;
+    this.io.send([0xb0 | (this.channel - 1), 11, Math.round(level * 127)]);
+  }
+
+  prime(): void {
+    if (!this.playerBellows()) this.setLevel(this.level);
+  }
+
+  private playerBellows(): boolean {
+    return this.io.thru && performance.now() - this.io.expressionAt < 1000;
+  }
 
   noteOn(note: number, velocity: number): void {
+    this.prime();
     this.io.send([0x90 | (this.channel - 1), note, Math.max(1, Math.round(velocity * 127))]);
     this.on.add(note);
   }
@@ -175,5 +195,6 @@ export class MidiOutSink implements NoteSink {
 
   allOff(): void {
     for (const note of this.on) this.noteOff(note);
+    this.io.send([0xb0 | (this.channel - 1), 123, 0]); // All Notes Off, in case anything is stuck
   }
 }

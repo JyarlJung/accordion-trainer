@@ -49,6 +49,7 @@ const ui = {
   hitWindow: $<HTMLInputElement>('hitWindow'),
   hitWindowLabel: $('hitWindowLabel'),
   upcoming: $<HTMLInputElement>('upcoming'),
+  thru: $<HTMLInputElement>('thru'),
   volume: $<HTMLInputElement>('volume'),
   volumeLabel: $('volumeLabel'),
   rowGapLabel: $('rowGapLabel'),
@@ -232,6 +233,7 @@ function togglePlay(): void {
 function startSound(): void {
   if (sink === synth) void synth.start();
   if (sink === sampler) void sampler.start();
+  if (sink instanceof MidiOutSink) sink.prime();
 }
 
 function clearLoop(): void {
@@ -271,6 +273,7 @@ ui.loopB.onclick = () => {
 ui.loopClear.onclick = clearLoop;
 function applyVolume(): void {
   setVolume(Number(ui.volume.value));
+  if (sink instanceof MidiOutSink) sink.setLevel(Number(ui.volume.value));
   ui.volumeLabel.textContent = `${Math.round(Number(ui.volume.value) * 100)}%`;
 }
 ui.volume.oninput = applyVolume;
@@ -298,6 +301,9 @@ function setCollapsed(collapsed: boolean): void {
 }
 collapseBtn.onclick = () => setCollapsed(!document.body.classList.contains('collapsed'));
 setCollapsed(getPref('toolbarCollapsed') === true);
+
+// Don't leave notes hanging on an external instrument when the app closes.
+window.addEventListener('beforeunload', () => silence());
 
 // Background tabs stop requestAnimationFrame, so note-offs would never fire.
 document.addEventListener('visibilitychange', () => {
@@ -361,6 +367,12 @@ const defaultVoice = `set:${sampleSets[0].id}`;
 
 let activeVoice: string | null = null;
 
+// Soft thru only makes sense while the song goes to a MIDI output.
+function applyThru(): void {
+  midi.thru = ui.thru.checked && (activeVoice?.startsWith('midi:') ?? false);
+}
+ui.thru.onchange = applyThru;
+
 function selectVoice(value: string): void {
   activeVoice = value;
   silence();
@@ -369,12 +381,13 @@ function selectVoice(value: string): void {
     sink = synth;
   } else if (value.startsWith('midi:')) {
     midi.selectOutput(value.slice(5));
-    sink = new MidiOutSink(midi, midi.channels.right);
+    sink = new MidiOutSink(midi, midi.channels.right, Number(ui.volume.value));
   } else {
     const set = sampleSets.find(s => `set:${s.id}` === value)!;
     sink = sampler;
     sampler.load(set).catch(e => alert(`음색을 불러오지 못했습니다: ${set.label}\n${e}`));
   }
+  applyThru();
 }
 
 ui.midiIn.onchange = () => {
@@ -392,7 +405,7 @@ persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.mode, 'mode');
 persist(ui.loopUnit, 'loopUnit');
-for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
+for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.thru, 'thru'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
   persist(el, key);
 }
 

@@ -12,6 +12,11 @@ export class MidiIO {
   readonly channels: Record<Part, number> = { right: 1, bass: 2, chord: 3 };
   readonly held: Record<Part, Map<number, number>> = { right: new Map(), bass: new Map(), chord: new Map() }; // note -> velocity
   expression = 0; // last CC11 (bellows pressure on the FR-4xb), 0..1
+  expressionAt = -Infinity; // performance.now() of that CC11
+  // Soft thru: echo the right-hand part back to the output. With the FR-4xb's accordion part set
+  // to External Seq. Playback (needed for it to play the song), its own keys no longer reach its
+  // sound engine; this puts them back.
+  thru = false;
   lastChannel: number | null = null;
   onNoteOn?: (part: Part, note: number, velocity: number) => void;
   onNoteOff?: (part: Part, note: number) => void;
@@ -78,12 +83,15 @@ export class MidiIO {
   }
 
   private handle(data: Uint8Array | null): void {
-    if (!data || data.length < 3) return;
+    if (!data || data.length < 2 || data[0] >= 0xf0) return;
     const type = data[0] & 0xf0;
     const channel = (data[0] & 0x0f) + 1;
+    if (this.thru && this.output && channel === this.channels.right) this.output.send(data);
+    if (data.length < 3) return;
     const [, d1, d2] = data;
     if (type === 0xb0 && d1 === 11) {
       this.expression = d2 / 127;
+      this.expressionAt = performance.now();
       return;
     }
     if (type !== 0x80 && type !== 0x90) return;
