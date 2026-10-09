@@ -9,6 +9,7 @@ import { Judge } from './core/judge';
 import { MidiIO } from './io/midi';
 import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, setVolume, type NoteSink } from './io/audio';
 import { userSampleSets } from './io/sampleSets';
+import { getPref, persist, setPref } from './io/prefs';
 import { Stage } from './view/stage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -241,32 +242,25 @@ ui.loopB.onclick = () => {
   seek(loop.a, true);
 };
 ui.loopClear.onclick = clearLoop;
-ui.volume.oninput = () => {
+function applyVolume(): void {
   setVolume(Number(ui.volume.value));
   ui.volumeLabel.textContent = `${Math.round(Number(ui.volume.value) * 100)}%`;
-};
-setVolume(Number(ui.volume.value));
-ui.rowGap.oninput = () => {
+}
+ui.volume.oninput = applyVolume;
+function applyRowGap(): void {
   ui.rowGapLabel.textContent = Number(ui.rowGap.value).toFixed(2);
-};
+}
+ui.rowGap.oninput = applyRowGap;
 
 // Toolbar collapse, remembered across launches.
 const collapseBtn = $<HTMLButtonElement>('collapse');
 function setCollapsed(collapsed: boolean): void {
   document.body.classList.toggle('collapsed', collapsed);
   collapseBtn.textContent = collapsed ? '▼' : '▲';
-  try {
-    localStorage.setItem('toolbarCollapsed', collapsed ? '1' : '0');
-  } catch {
-    // Storage may be unavailable; the toggle still works for this session.
-  }
+  setPref('toolbarCollapsed', collapsed);
 }
 collapseBtn.onclick = () => setCollapsed(!document.body.classList.contains('collapsed'));
-try {
-  setCollapsed(localStorage.getItem('toolbarCollapsed') === '1');
-} catch {
-  setCollapsed(false);
-}
+setCollapsed(getPref('toolbarCollapsed') === true);
 
 // Background tabs stop requestAnimationFrame, so note-offs would never fire.
 document.addEventListener('visibilitychange', () => {
@@ -292,9 +286,11 @@ window.addEventListener('keydown', e => {
 for (const [part, select] of [['right', ui.chRight], ['bass', ui.chBass], ['chord', ui.chChord]] as const) {
   for (let c = 1; c <= 16; c++) select.append(new Option(String(c), String(c)));
   select.value = String(midi.channels[part]);
-  select.onchange = () => {
+  const apply = () => {
     midi.channels[part] = Number(select.value);
   };
+  select.addEventListener('change', apply);
+  persist(select, `channel.${part}`, apply);
 }
 
 function refreshPorts(): void {
@@ -303,23 +299,33 @@ function refreshPorts(): void {
   ui.midiIn.replaceChildren(new Option(midi.supported ? '없음' : '미지원 브라우저', ''));
   for (const p of inputs) ui.midiIn.append(new Option(p.name, p.id));
   // Keep the current input; otherwise prefer something that looks like the accordion.
-  const pick = inputs.find(p => p.id === current) ?? inputs.find(p => /FR-?\d|roland/i.test(p.name)) ?? inputs[0];
+  const savedName = getPref('midiIn');
+  const pick = inputs.find(p => p.id === current)
+    ?? inputs.find(p => p.name === savedName)
+    ?? inputs.find(p => /FR-?\d|roland/i.test(p.name))
+    ?? inputs[0];
   ui.midiIn.value = pick?.id ?? '';
   if ((pick?.id ?? null) !== current) midi.selectInput(pick?.id ?? null);
 
-  const outValue = ui.output.value || defaultVoice;
+  const saved = getPref('output');
+  const outValue = ui.output.value || (typeof saved === 'string' ? saved : defaultVoice);
   ui.output.replaceChildren();
   for (const s of sampleSets) ui.output.append(new Option(s.label, `set:${s.id}`));
   ui.output.append(new Option('신시', 'synth'));
   for (const p of midi.outputs()) ui.output.append(new Option(`MIDI: ${p.name}`, `midi:${p.id}`));
   ui.output.value = [...ui.output.options].some(o => o.value === outValue) ? outValue : defaultVoice;
+  // A saved MIDI output only appears once MIDI is ready; switch to it then.
+  if (activeVoice !== null && ui.output.value !== activeVoice) selectVoice(ui.output.value);
 }
 
 // Sound choices: sample sets, the synth, or a MIDI output.
 const sampleSets = [...userSampleSets(), ...BUILTIN_SETS];
 const defaultVoice = `set:${sampleSets[0].id}`;
 
+let activeVoice: string | null = null;
+
 function selectVoice(value: string): void {
+  activeVoice = value;
   silence();
   midi.selectOutput(null);
   if (value === 'synth') {
@@ -334,8 +340,22 @@ function selectVoice(value: string): void {
   }
 }
 
-ui.midiIn.onchange = () => midi.selectInput(ui.midiIn.value || null);
-ui.output.onchange = () => selectVoice(ui.output.value);
+ui.midiIn.onchange = () => {
+  midi.selectInput(ui.midiIn.value || null);
+  setPref('midiIn', ui.midiIn.selectedOptions[0]?.text ?? '');
+};
+ui.output.onchange = () => {
+  selectVoice(ui.output.value);
+  setPref('output', ui.output.value);
+};
+
+// Restore the remembered settings (song-specific options are left out on purpose).
+persist(ui.volume, 'volume', applyVolume);
+persist(ui.rowGap, 'rowGap', applyRowGap);
+persist(ui.mode, 'mode');
+for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
+  persist(el, key);
+}
 
 midi.onNoteOn = (part, note) => {
   if (part === 'right') stage.flash(note, judge.onNoteOn(note, transport.time, transport.rate));

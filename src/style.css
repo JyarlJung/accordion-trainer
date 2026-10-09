@@ -36,12 +36,12 @@ body.collapsed #toolbarBody { display: none; }
 }
 .sep { width: 1px; height: 18px; background: var(--line); }
 .group { display: inline-flex; align-items: center; gap: 4px; }
-.group[hidden] { display: none; }
-#settings { flex-wrap: wrap; gap: 6px 10px; }
+.group[hidden], .bar[hidden] { display: none; }
 
 /* Transport row stays visible even with the toolbar collapsed; the seek bar takes the spare width. */
 .transport { flex-wrap: nowrap; }
-.transport #seek { flex: 1; width: auto; min-width: 120px; }
+.transport #seek { flex: 1 1 50%; width: auto; min-width: 120px; max-width: 50%; }
+.spacer { flex: 1; }
 #play { min-width: 56px; font-size: 15px; }
 
 .muted { color: var(--muted); }
