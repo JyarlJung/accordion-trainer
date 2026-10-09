@@ -62,7 +62,7 @@ export class Stage {
     const now = performance.now();
     this.flashes = this.flashes.filter(f => now - f.at < FLASH_MS);
 
-    drawLanes(ctx, this.geo, this.layout, s);
+    drawLanes(ctx, this.geo, s);
     drawGrid(ctx, this.geo, this.layout, this.buildMarks(s));
     drawNotes(ctx, this.geo, this.layout, s);
     drawBellows(ctx, this.geo, s.pressure);

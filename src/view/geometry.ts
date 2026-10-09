@@ -39,7 +39,7 @@ export class Geometry {
   readonly right: number;
   readonly labelX: number;
   readonly rollTop: number;
-  readonly rollBottom: number; // highest judgment line
+  readonly rollBottom: number; // the judgment line: top of the board's first row
   readonly lanesBottom: number; // lowest main-row judgment line plus a button
   readonly rhRowsTop: number;
   readonly meterY: number;
@@ -109,7 +109,7 @@ export class Geometry {
 
     const mainLines = layout.rows.filter(r => r.role === 'main').map(r => this.landY(r.row));
     this.rollTop = PAD_Y;
-    this.rollBottom = Math.min(...mainLines);
+    this.rollBottom = Math.min(...this.rhOrder.map(r => this.landY(r)));
     this.lanesBottom = Math.max(...mainLines) + this.radius * 2;
     this.rowStep = this.rowLineY(2) - this.rowLineY(1);
     this.shear = (layout.rowShift * p) / this.rowStep;

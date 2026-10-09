@@ -14,8 +14,8 @@ export interface RollState {
 
 const NOTE_ALPHA = 0.5;
 
-// Background: one diagonal lane per semitone, and a judgment line on top of each row.
-export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
+// Background: one diagonal lane per semitone (running on to its button), and the judgment line.
+export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, s: RollState): void {
   const y0 = geo.rollTop, y1 = geo.lanesBottom, w = geo.lane;
   for (let note = geo.lo; note <= geo.hi; note++) {
     const a = geo.laneX(note, y0), b = geo.laneX(note, y1);
@@ -48,22 +48,17 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: 
     }
   }
 
-  for (const row of layout.rows) {
-    if (!geo.showsRow(row.row)) continue;
-    const y = geo.landY(row.row);
-    ctx.globalAlpha = row.role === 'main' ? 0.55 : 0.2;
-    ctx.strokeStyle = ROW_COLORS[row.row] ?? HELPER_ONLY;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(geo.left, y);
-    ctx.lineTo(geo.right, y);
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
+  // One shared judgment line, so notes of one chord always land together.
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(geo.left, geo.rollBottom);
+  ctx.lineTo(geo.right, geo.rollBottom);
+  ctx.stroke();
 }
 
 // Notes: translucent, sheared along their lane, bottom edge level. A note is due when its
-// bottom edge reaches the judgment line of its own row.
+// bottom edge reaches the shared judgment line; its lane then leads on to its button.
 export function drawNotes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
   const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;
   const half = geo.radius;
@@ -71,7 +66,7 @@ export function drawNotes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: 
     if (n.time > s.time + s.lookahead * 1.5) break;
     const b = layout.primary(n.note);
     if (!b) continue;
-    const land = geo.landY(b.row);
+    const land = geo.rollBottom;
     const bottom = Math.min(land, land - (n.time - s.time) * pps);
     // A small gap keeps repeated notes of the same pitch visibly separate.
     const top = Math.max(geo.rollTop, land - (n.time + n.duration - s.time) * pps + 2);
