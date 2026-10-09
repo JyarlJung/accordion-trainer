@@ -40,6 +40,8 @@ const ui = {
   helpers: $<HTMLInputElement>('helpers'),
   mirror: $<HTMLInputElement>('mirror'),
   mirrorX: $<HTMLInputElement>('mirrorX'),
+  rowGap: $<HTMLInputElement>('rowGap'),
+  rowGapLabel: $('rowGapLabel'),
 };
 
 const layout = new Layout(layoutJson as LayoutDef);
@@ -203,6 +205,9 @@ ui.loopB.onclick = () => {
   seek(loop.a, true);
 };
 ui.loopClear.onclick = clearLoop;
+ui.rowGap.oninput = () => {
+  ui.rowGapLabel.textContent = Number(ui.rowGap.value).toFixed(2);
+};
 
 // Sidebar collapse, remembered across launches.
 const collapseBtn = $<HTMLButtonElement>('collapse');
@@ -349,6 +354,7 @@ function frame(now: number): void {
     showHelpers: ui.helpers.checked,
     mirror: ui.mirror.checked,
     mirrorX: ui.mirrorX.checked,
+    rowGap: Number(ui.rowGap.value),
   });
 
   if (document.activeElement !== ui.seek && transport.duration > 0) {

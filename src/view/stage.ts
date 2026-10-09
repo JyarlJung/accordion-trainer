@@ -2,22 +2,21 @@ import type { BassLayout } from '../core/bassLayout';
 import type { Layout } from '../core/layout';
 import type { HitResult } from '../core/judge';
 import { drawBass, drawBellows } from './bass';
-import { DUPLICATE, EXPECT, HIT, LIVE, MISSED, ONSET, UPCOMING } from './colors';
+import { DUPLICATE, EXPECT, HIT, LIVE, MISSED, ONSET } from './colors';
 import { Geometry } from './geometry';
 import { drawGrid, type Mark } from './grid';
-import { drawRoll, type RollState } from './roll';
+import { drawLanes, drawNotes, type RollState } from './roll';
 
 export interface ViewState extends RollState {
   held: ReadonlyMap<number, number>; // treble notes held on the instrument
   bassHeld: ReadonlyMap<number, number>;
   chordHeld: ReadonlyMap<number, number>;
   pressure: number; // bellows, 0..1
-  showHelpers: boolean;
   mirror: boolean; // flip top-bottom
   mirrorX: boolean; // flip left-right
+  rowGap: number; // treble row spacing, in button pitches
 }
 
-const UPCOMING_CHORDS = 3;
 const FLASH_MS = 400;
 const ONSET_FLASH = 0.12; // seconds of song time
 
@@ -46,9 +45,9 @@ export class Stage {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(h * dpr);
     }
-    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}`;
+    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}`;
     if (!this.geo || key !== this.geoKey) {
-      this.geo = new Geometry(this.layout, this.bass, w, h, s.mirror, s.mirrorX);
+      this.geo = new Geometry(this.layout, this.bass, w, h, { flipY: s.mirror, flipX: s.mirrorX, rowGap: s.rowGap });
       this.geoKey = key;
     }
     const ctx = this.ctx;
@@ -58,8 +57,9 @@ export class Stage {
     const now = performance.now();
     this.flashes = this.flashes.filter(f => now - f.at < FLASH_MS);
 
-    drawRoll(ctx, this.geo, this.layout, s);
+    drawLanes(ctx, this.geo, this.layout, s);
     drawGrid(ctx, this.geo, this.layout, this.buildMarks(s), s.showHelpers);
+    drawNotes(ctx, this.geo, this.layout, s);
     drawBellows(ctx, this.geo, s.pressure);
     drawBass(ctx, this.geo, this.bass, this.buildBassMarks(s));
   }
@@ -82,18 +82,6 @@ export class Stage {
     const set = (id: string, m: Mark) => marks.set(id, { ...marks.get(id), ...m });
     const t = s.time;
 
-    // Upcoming chords: numbered outlines, fading with distance.
-    let k = 0;
-    for (const c of s.judge.chords) {
-      if (c.time <= t + 0.02) continue;
-      if (k >= UPCOMING_CHORDS) break;
-      for (const id of c.ids) {
-        const b = this.layout.primary(s.notes[id].note);
-        if (b && !marks.has(b.id)) set(b.id, { ring: UPCOMING, badge: k + 1, alpha: 1 - k * 0.25 });
-      }
-      k++;
-    }
-
     // Notes that should be held right now.
     const expected = new Set<number>();
     for (const n of s.notes) {
@@ -106,7 +94,7 @@ export class Stage {
       const fill = state === 'hit' ? HIT : state === 'missed' ? MISSED : EXPECT;
       // Briefly flash at each onset so a repeated note reads as a new press.
       const onset = t - n.time < ONSET_FLASH && state !== 'hit';
-      set(primary.id, { fill: onset ? ONSET : fill, ring: onset ? '#fff' : undefined, badge: undefined, alpha: 1 });
+      set(primary.id, { fill: onset ? ONSET : fill, ring: onset ? '#fff' : undefined, alpha: 1 });
       if (s.showHelpers) for (const d of dups) set(d.id, { ring: DUPLICATE, alpha: 1 });
     }
 

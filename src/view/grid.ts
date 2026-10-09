@@ -14,6 +14,7 @@ export interface ButtonStyle {
   base: string;
   text: string;
   landmark: boolean; // thin gold ring for orientation (C on the treble, marked bass buttons)
+  fontScale?: number; // label size relative to the radius
 }
 
 // Draws one round button with its label and any overlay mark. Shared by the treble and bass boards.
@@ -47,7 +48,7 @@ export function drawButton(
   }
 
   ctx.fillStyle = m?.fill ? '#fff' : style.text;
-  ctx.font = `600 ${r * (label.length > 3 ? 0.46 : 0.56)}px system-ui, sans-serif`;
+  ctx.font = `600 ${r * (style.fontScale ?? (label.length > 3 ? 0.46 : 0.56))}px system-ui, sans-serif`;
   ctx.fillText(label, x, y + 0.5);
 
   if (m?.badge) {
@@ -93,10 +94,13 @@ export function drawGrid(
     const { x, y } = geo.pos(b);
     const m = marks.get(b.id);
     ctx.globalAlpha = m?.alpha ?? (b.role === 'helper' && !m ? (showHelpers ? 0.55 : 0.18) : 1);
-    drawButton(ctx, x, y, r, noteName(b.note), {
+    // Buttons are lane-sized, so only C carries its octave.
+    const label = b.note % 12 === 0 ? noteName(b.note) : noteName(b.note).replace(/-?\d+$/, '');
+    drawButton(ctx, x, y, r, label, {
       base: b.black ? '#26262b' : '#ebe7de',
       text: b.black ? '#d8d8d8' : '#222',
       landmark: b.note % 12 === 0,
+      fontScale: label.length > 2 ? 0.62 : 0.8,
     }, m);
   }
   ctx.globalAlpha = 1;

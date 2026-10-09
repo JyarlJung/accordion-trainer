@@ -8,73 +8,97 @@ export interface RollState {
   time: number;
   notes: SongNote[];
   judge: Judge;
-  lookahead: number; // seconds visible above the now line
+  lookahead: number; // seconds of travel from the top to the highest judgment line
   loop: { a: number; b: number } | null;
+  showHelpers: boolean;
 }
 
-const NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const NOTE_ALPHA = 0.5;
 
-// Notes fall from the top and reach the now line directly above their button.
-export function drawRoll(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
-  const y0 = geo.rollTop, y1 = geo.rollBottom;
-  if (y1 - y0 < 30) return;
-  const pps = (y1 - y0) / s.lookahead;
-  const toY = (t: number) => y1 - (t - s.time) * pps;
-  const lane = geo.pitch / 3;
-  const lo = geo.pitchX(layout.minNote), hi = geo.pitchX(layout.maxNote);
-  const xa = Math.min(lo, hi) - lane / 2, xb = Math.max(lo, hi) + lane / 2;
-  const toward = Math.sign(geo.pitchX(layout.minNote + 1) - lo); // +1 when low notes are on the left
-
-  ctx.fillStyle = 'rgba(255,255,255,0.03)';
-  ctx.fillRect(xa, y0, xb - xa, y1 - y0);
-
-  // One lane per semitone, piano-roll style: black-key lanes darker, a line on the low side of each C.
+// Background: one diagonal lane per semitone, and a judgment line on top of each row.
+export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
+  const y0 = geo.rollTop, y1 = geo.lanesBottom, w = geo.lane;
   for (let note = layout.minNote; note <= layout.maxNote; note++) {
-    const x = geo.pitchX(note);
+    const a = geo.laneX(note, y0), b = geo.laneX(note, y1);
     if (isBlack(note)) {
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(x - lane / 2, y0, lane, y1 - y0);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.moveTo(a - w / 2, y0);
+      ctx.lineTo(a + w / 2, y0);
+      ctx.lineTo(b + w / 2, y1);
+      ctx.lineTo(b - w / 2, y1);
+      ctx.fill();
     }
-    if (note % 12 === 0) {
-      ctx.fillStyle = 'rgba(201,162,39,0.4)';
-      ctx.fillRect(x - (toward * lane) / 2, y0, 1, y1 - y0);
-    }
+    // Gold edge on the low side of each C lane.
+    const side = Math.sign(geo.laneX(note + 1, y1) - b) * (w / 2);
+    ctx.strokeStyle = note % 12 === 0 ? 'rgba(201,162,39,0.5)' : 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(a - side, y0);
+    ctx.lineTo(b - side, y1);
+    ctx.stroke();
   }
 
   if (s.loop) {
-    const la = Math.min(y1, toY(s.loop.a)), lb = Math.max(y0, toY(s.loop.b));
-    if (la > lb) {
-      ctx.fillStyle = 'rgba(255,213,79,0.07)';
-      ctx.fillRect(xa, lb, xb - xa, la - lb);
+    const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;
+    const ya = Math.min(geo.rollBottom, geo.rollBottom - (s.loop.a - s.time) * pps);
+    const yb = Math.max(geo.rollTop, geo.rollBottom - (s.loop.b - s.time) * pps);
+    if (ya > yb) {
+      ctx.fillStyle = 'rgba(255,213,79,0.06)';
+      ctx.fillRect(geo.left, yb, geo.right - geo.left, ya - yb);
     }
   }
 
-  const w = lane * 0.86;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.font = `600 ${Math.max(8, Math.min(11, w * 0.5))}px system-ui, sans-serif`;
-  for (const n of s.notes) {
-    if (n.time > s.time + s.lookahead) break;
-    const bottom = Math.min(y1, toY(n.time));
-    // A small gap keeps repeated notes of the same pitch visibly separate.
-    const top = Math.max(y0, toY(n.time) - Math.max(n.duration * pps - 2, 3));
-    if (top >= y1) continue;
-    const b = layout.primary(n.note);
-    if (!b) continue;
-    const x = geo.pitchX(n.note);
-    const state = s.judge.state[n.id];
-    ctx.globalAlpha = state === 'missed' || state === 'skipped' ? 0.35 : 1;
-    ctx.fillStyle = state === 'hit' ? HIT : b.role === 'main' ? ROW_COLORS[b.row] : HELPER_ONLY;
+  for (const row of layout.rows) {
+    if (row.role !== 'main' && !s.showHelpers) continue;
+    const y = geo.landY(row.row);
+    ctx.globalAlpha = row.role === 'main' ? 0.55 : 0.2;
+    ctx.strokeStyle = ROW_COLORS[row.row] ?? HELPER_ONLY;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.roundRect(x - w / 2, top, w, bottom - top, w * 0.3);
-    ctx.fill();
-    if (bottom - top > 16) {
-      ctx.fillStyle = '#111';
-      ctx.fillText(NAMES[n.note % 12], x, bottom - 2);
-    }
+    ctx.moveTo(geo.left, y);
+    ctx.lineTo(geo.right, y);
+    ctx.stroke();
   }
   ctx.globalAlpha = 1;
+}
 
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillRect(xa, y1 - 1, xb - xa, 2);
+// Notes: translucent, sheared along their lane, bottom edge level. A note is due when its
+// bottom edge reaches the judgment line of its own row.
+export function drawNotes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
+  const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;
+  const half = geo.radius;
+  for (const n of s.notes) {
+    if (n.time > s.time + s.lookahead * 1.5) break;
+    const b = layout.primary(n.note);
+    if (!b) continue;
+    const land = geo.landY(b.row);
+    const bottom = Math.min(land, land - (n.time - s.time) * pps);
+    // A small gap keeps repeated notes of the same pitch visibly separate.
+    const top = Math.max(geo.rollTop, land - (n.time + n.duration - s.time) * pps + 2);
+    if (top >= bottom || bottom < geo.rollTop) continue;
+    const xb = geo.laneX(n.note, bottom), xt = geo.laneX(n.note, top);
+    const state = s.judge.state[n.id];
+    const color = state === 'hit' ? HIT : b.role === 'main' ? ROW_COLORS[b.row] : HELPER_ONLY;
+    const faded = state === 'missed' || state === 'skipped';
+
+    ctx.globalAlpha = faded ? NOTE_ALPHA * 0.4 : NOTE_ALPHA;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(xt - half, top);
+    ctx.lineTo(xt + half, top);
+    ctx.lineTo(xb + half, bottom);
+    ctx.lineTo(xb - half, bottom);
+    ctx.fill();
+
+    // Solid bottom edge, thicker once it sits on the judgment line.
+    ctx.globalAlpha = faded ? 0.4 : 1;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = bottom >= land - 0.5 ? 2.5 : 1.5;
+    ctx.beginPath();
+    ctx.moveTo(xb - half, bottom);
+    ctx.lineTo(xb + half, bottom);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
 }

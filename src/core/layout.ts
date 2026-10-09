@@ -74,9 +74,16 @@ export class Layout {
     return this.byNote.get(note)?.[0];
   }
 
-  // Screen height of a pitch, in button units. Linear in pitch, so every semitone gets its own
-  // height; this slants the columns 1/6 button apart, tracing the chromatic diagonal.
-  pitchY(note: number): number {
-    return (note - this.minNote) / this.def.semitonesPerButton;
+  // Position along a row (in buttons) where `note` sits, or would sit, on that row.
+  // Fractional for notes the row doesn't have; this is what lets each semitone get its own lane.
+  laneU(note: number, row: number): number {
+    const r = this.rows.find(d => d.row === row)!;
+    return (note - r.start) / this.def.semitonesPerButton + r.yOffset;
+  }
+
+  // How far a note's lane moves along the rows (in buttons) per row step. On the C-system this is
+  // 1/6 for every row, which makes the lanes straight diagonals that never share a pitch.
+  get rowShift(): number {
+    return this.laneU(this.minNote, 2) - this.laneU(this.minNote, 1);
   }
 }

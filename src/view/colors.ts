@@ -8,5 +8,4 @@ export const HIT = '#43a047';
 export const MISSED = '#7f3b3b';
 export const LIVE = '#1e88e5'; // pressed on the instrument, not expected
 export const WRONG = '#f50057';
-export const UPCOMING = '#ef9a9a';
 export const C_MARK = '#c9a227';
