@@ -8,6 +8,10 @@ export interface Chord {
   ids: number[];
 }
 
+// Float slack for window edges: wait mode parks the clock exactly on chord + window, and
+// (t + w) - w doesn't always round back to t.
+const EPS = 1e-6;
+
 // Matches live note-ons against the expected notes.
 export class Judge {
   readonly state: NoteState[];
@@ -15,13 +19,15 @@ export class Judge {
   hit = 0;
   miss = 0;
   wrong = 0;
-  windowSec = 0.2; // real-time tolerance (early or late); scaled by playback rate into song time
+  windowSec = 0.12; // real-time tolerance (early or late); scaled by playback rate into song time
   lastHit: number | null = null; // id of the note matched by the latest 'hit'
   private missPtr = 0;
   private chordPtr = 0;
 
-  constructor(readonly notes: SongNote[]) {
-    this.state = notes.map(() => 'pending');
+  // `playable` filters out notes with no button to press (e.g. out of range with fitting off);
+  // they're skipped so wait mode never stalls on them.
+  constructor(readonly notes: SongNote[], private readonly playable: (note: number) => boolean = () => true) {
+    this.state = notes.map(n => (playable(n.note) ? 'pending' : 'skipped'));
     for (const n of notes) {
       const last = this.chords[this.chords.length - 1];
       if (last && n.time - last.time < CHORD_EPS) last.ids.push(n.id);
@@ -30,7 +36,9 @@ export class Judge {
   }
 
   resetFrom(t: number, resetStats: boolean): void {
-    for (const n of this.notes) this.state[n.id] = n.time < t - 1e-6 ? 'skipped' : 'pending';
+    for (const n of this.notes) {
+      this.state[n.id] = n.time < t - EPS || !this.playable(n.note) ? 'skipped' : 'pending';
+    }
     this.missPtr = 0;
     this.chordPtr = 0;
     if (resetStats) this.hit = this.miss = this.wrong = 0;
@@ -38,7 +46,7 @@ export class Judge {
 
   onNoteOn(pitch: number, t: number, rate: number): HitResult {
     if (this.notes.length === 0) return 'free';
-    const win = this.windowSec * rate;
+    const win = this.windowSec * rate + EPS;
     let best = -1;
     let bestDist = Infinity;
     for (const n of this.notes) {

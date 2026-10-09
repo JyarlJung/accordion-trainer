@@ -6,6 +6,7 @@ import { Layout, noteName, type LayoutDef } from './core/layout';
 import { extractNotes, guessOptions, lowerBound, parseSong, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
+import { pressInWaitMode } from './core/practice';
 import { MidiIO } from './io/midi';
 import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, setVolume, type NoteSink } from './io/audio';
 import { userSampleSets } from './io/sampleSets';
@@ -118,7 +119,7 @@ function rebuild(t = transport.time): void {
   if (!song || !options) return;
   notes = extractNotes(song, options, { min: layout.minNote, max: layout.maxNote });
   songRange = rangeFor(notes);
-  judge = new Judge(notes);
+  judge = new Judge(notes, n => layout.primary(n) !== undefined);
   transport.duration = song.duration;
   seek(t, true);
 }
@@ -381,10 +382,13 @@ for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRa
 
 midi.onNoteOn = (part, note) => {
   if (part !== 'right') return;
-  const result = judge.onNoteOn(note, transport.time, transport.rate);
+  const waitMode = ui.mode.value === 'wait';
+  const result = waitMode
+    ? pressInWaitMode(judge, transport, note)
+    : judge.onNoteOn(note, transport.time, transport.rate);
   stage.flash(note, result);
   // Wait mode stays quiet until a note is played right, then sounds it for its written length.
-  if (result === 'hit' && ui.mode.value === 'wait' && ui.sound.checked && judge.lastHit !== null) {
+  if (result === 'hit' && waitMode && ui.sound.checked && judge.lastHit !== null) {
     const n = notes[judge.lastHit];
     startSound();
     sink.noteOn(n.note, n.velocity);
