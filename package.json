@@ -3,17 +3,26 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
+    "app": "node scripts/dev-electron.js",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dist": "npm run build && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "local.accordion-trainer",
+    "productName": "Accordion Trainer",
+    "files": ["dist/**", "electron/**", "package.json"],
+    "directories": { "output": "release" }
   },
   "devDependencies": {
+    "@tonejs/midi": "^2.0.28",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "tone": "^15.1.22",
     "typescript": "^7.0.2",
     "vite": "^8.3.4"
-  },
-  "dependencies": {
-    "@tonejs/midi": "^2.0.28",
-    "tone": "^15.1.22"
   }
 }
