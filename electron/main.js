@@ -25,6 +25,18 @@ app.whenReady().then(() => {
     width: 1400, height: 900, backgroundColor: '#16161b', autoHideMenuBar: true, title: 'Accordion Trainer',
   });
   win.loadURL(devUrl ?? 'app://bundle/index.html');
+
+  // Let the page silence any MIDI instrument it drives before the window goes away.
+  let closing = false;
+  win.on('close', e => {
+    if (closing) return;
+    closing = true;
+    e.preventDefault();
+    win.webContents
+      .executeJavaScript('window.accordionShutdown?.()')
+      .catch(() => {})
+      .finally(() => setTimeout(() => win.destroy(), 200));
+  });
 });
 
 app.on('window-all-closed', () => app.quit());

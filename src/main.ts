@@ -303,7 +303,13 @@ collapseBtn.onclick = () => setCollapsed(!document.body.classList.contains('coll
 setCollapsed(getPref('toolbarCollapsed') === true);
 
 // Don't leave notes hanging on an external instrument when the app closes.
-window.addEventListener('beforeunload', () => silence());
+function shutdown(): void {
+  silence();
+  midi.shutdown();
+}
+window.addEventListener('beforeunload', shutdown);
+// The Electron shell calls this before closing so the messages get out before the process exits.
+Object.assign(window, { accordionShutdown: shutdown });
 
 // Background tabs stop requestAnimationFrame, so note-offs would never fire.
 document.addEventListener('visibilitychange', () => {

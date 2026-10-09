@@ -159,8 +159,9 @@ export class SamplerSink implements NoteSink {
 
 // Sends the song to a MIDI output (e.g. back to the accordion to use its own sound).
 // V-Accordion reed sounds take their loudness from the bellows (CC11 Expression), so a note
-// arriving with no bellows value is silent. The sink sends its own bellows level unless the
-// player's real bellows (echoed by soft thru) moved within the last second.
+// arriving with no bellows value is silent. With soft thru on, the player's own bellows (echoed
+// back) is the only bellows source; mixing in a second one made the volume jump. Without thru,
+// the sink sends a fixed level from the volume slider so a listen-only setup still sounds.
 export class MidiOutSink implements NoteSink {
   private readonly on = new Set<number>();
 
@@ -179,7 +180,7 @@ export class MidiOutSink implements NoteSink {
   }
 
   private playerBellows(): boolean {
-    return this.io.thru && performance.now() - this.io.expressionAt < 1000;
+    return this.io.thru;
   }
 
   noteOn(note: number, velocity: number): void {
@@ -195,6 +196,7 @@ export class MidiOutSink implements NoteSink {
 
   allOff(): void {
     for (const note of this.on) this.noteOff(note);
-    this.io.send([0xb0 | (this.channel - 1), 123, 0]); // All Notes Off, in case anything is stuck
+    this.io.send([0xb0 | (this.channel - 1), 123, 0]); // All Notes Off
+    this.io.send([0xb0 | (this.channel - 1), 120, 0]); // All Sound Off
   }
 }

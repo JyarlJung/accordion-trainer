@@ -12,7 +12,6 @@ export class MidiIO {
   readonly channels: Record<Part, number> = { right: 1, bass: 2, chord: 3 };
   readonly held: Record<Part, Map<number, number>> = { right: new Map(), bass: new Map(), chord: new Map() }; // note -> velocity
   expression = 0; // last CC11 (bellows pressure on the FR-4xb), 0..1
-  expressionAt = -Infinity; // performance.now() of that CC11
   // Soft thru: echo the right-hand part back to the output. With the FR-4xb's accordion part set
   // to External Seq. Playback (needed for it to play the song), its own keys no longer reach its
   // sound engine; this puts them back.
@@ -68,6 +67,15 @@ export class MidiIO {
     this.output?.send(bytes);
   }
 
+  // Stops soft thru and silences every channel of the output (used when the app closes).
+  shutdown(): void {
+    this.thru = false;
+    for (let ch = 0; ch < 16; ch++) {
+      this.send([0xb0 | ch, 123, 0]); // All Notes Off
+      this.send([0xb0 | ch, 120, 0]); // All Sound Off
+    }
+  }
+
   // Feeds a fake message through the same path as real input (for testing without the instrument).
   simulate(note: number, on: boolean, channel = 1): void {
     this.handle(new Uint8Array([(on ? 0x90 : 0x80) | (channel - 1), note, on ? 100 : 0]));
@@ -91,7 +99,6 @@ export class MidiIO {
     const [, d1, d2] = data;
     if (type === 0xb0 && d1 === 11) {
       this.expression = d2 / 127;
-      this.expressionAt = performance.now();
       return;
     }
     if (type !== 0x80 && type !== 0x90) return;
