@@ -1,9 +1,15 @@
 import { app, BrowserWindow, net, protocol, session } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { listSampleSets, sampleFile } from './sampleIndex.js';
 
 const distDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../dist');
 const devUrl = process.env.VITE_DEV_SERVER_URL;
+// User sample sets sit in a "samples" folder next to the exe. The portable build runs from a
+// temp folder, so its real location comes from PORTABLE_EXECUTABLE_DIR.
+const samplesDir = path.join(process.env.PORTABLE_EXECUTABLE_DIR ?? path.dirname(app.getPath('exe')), 'samples');
+const notFound = () => new Response('Not found', { status: 404 });
 
 // Serve the built app from app:// so fetch() works and the page is a secure context (Web MIDI).
 protocol.registerSchemesAsPrivileged([
@@ -12,8 +18,14 @@ protocol.registerSchemesAsPrivileged([
 
 app.whenReady().then(() => {
   protocol.handle('app', req => {
-    const file = path.join(distDir, decodeURIComponent(new URL(req.url).pathname));
-    if (!file.startsWith(distDir)) return new Response('Not found', { status: 404 });
+    const pathname = decodeURIComponent(new URL(req.url).pathname);
+    if (pathname === '/user-samples/index.json') return Response.json(listSampleSets(samplesDir));
+    if (pathname.startsWith('/user-samples/')) {
+      const file = sampleFile(samplesDir, pathname.slice('/user-samples/'.length));
+      return file && fs.existsSync(file) ? net.fetch(pathToFileURL(file).toString()) : notFound();
+    }
+    const file = path.join(distDir, pathname);
+    if (!file.startsWith(distDir)) return notFound();
     return net.fetch(pathToFileURL(file).toString());
   });
   // Grant Web MIDI without prompting. Chromium reports even plain requestMIDIAccess() as 'midiSysex'.

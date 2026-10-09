@@ -9,7 +9,7 @@
     "app": "node scripts/dev-electron.js",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "dist": "npm run build && electron-builder --win portable"
+    "dist": "npm run build && electron-builder --win portable && node scripts/copy-samples.js"
   },
   "build": {
     "appId": "local.accordion-trainer",

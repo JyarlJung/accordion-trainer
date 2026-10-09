@@ -8,7 +8,7 @@ import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode } from './core/practice';
 import { MidiIO } from './io/midi';
-import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, setVolume, type NoteSink } from './io/audio';
+import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, setVolume, type NoteSink, type SampleSet } from './io/audio';
 import { userSampleSets } from './io/sampleSets';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
 import { Stage } from './view/stage';
@@ -381,8 +381,9 @@ function refreshPorts(): void {
 }
 
 // Sound choices: sample sets, the synth, or a MIDI output.
-const sampleSets = [...userSampleSets(), ...BUILTIN_SETS];
-const defaultVoice = `set:${sampleSets[0].id}`;
+// User sample sets arrive asynchronously (read from disk); built-in sets until then.
+let sampleSets: SampleSet[] = [...BUILTIN_SETS];
+let defaultVoice = `set:${sampleSets[0].id}`;
 
 let activeVoice: string | null = null;
 
@@ -449,9 +450,15 @@ function judgePress(note: number): void {
   }
 }
 midi.onPortsChanged = refreshPorts;
-refreshPorts();
-selectVoice(ui.output.value);
-void midi.init().then(refreshPorts);
+// Pick the voice only once the user's sample sets are known, so a saved voice can be restored
+// (and the online GM set isn't fetched for nothing).
+void userSampleSets().then(list => {
+  sampleSets = [...list, ...BUILTIN_SETS];
+  defaultVoice = `set:${sampleSets[0].id}`;
+  refreshPorts();
+  selectVoice(ui.output.value);
+  void midi.init().then(refreshPorts);
+});
 
 // ---------- frame loop ----------
 
