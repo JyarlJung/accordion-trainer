@@ -23,9 +23,9 @@ body { display: flex; flex-direction: column; }
 header {
   background: var(--panel);
   border-bottom: 1px solid var(--line);
-  padding: 6px 48px 6px 12px;
+  padding: 6px 12px;
 }
-body.collapsed header { display: none; }
+body.collapsed #toolbarBody { display: none; }
 
 .bar {
   display: flex;
@@ -37,14 +37,12 @@ body.collapsed header { display: none; }
 .sep { width: 1px; height: 18px; background: var(--line); }
 .group { display: inline-flex; align-items: center; gap: 4px; }
 .group[hidden] { display: none; }
+#settings { flex-wrap: wrap; gap: 6px 10px; }
 
-#collapse {
-  position: fixed;
-  top: 8px;
-  right: 10px;
-  z-index: 1;
-  padding: 2px 8px;
-}
+/* Transport row stays visible even with the toolbar collapsed; the seek bar takes the spare width. */
+.transport { flex-wrap: nowrap; }
+.transport #seek { flex: 1; width: auto; min-width: 120px; }
+#play { min-width: 56px; font-size: 15px; }
 
 .muted { color: var(--muted); }
 .mono { font-variant-numeric: tabular-nums; }
@@ -66,7 +64,6 @@ button:hover, .btn:hover { background: #34343f; }
 button.primary { background: var(--accent); border-color: var(--accent); min-width: 40px; }
 button.active { outline: 2px solid #ffd54f; }
 
-#seek { width: 200px; }
 #rate, #volume, #rowGap { width: 90px; }
 #midiIn, #output { max-width: 180px; }
 

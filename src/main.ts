@@ -20,8 +20,8 @@ const ui = {
   topLine: $<HTMLInputElement>('topLine'),
   fit: $<HTMLInputElement>('fit'),
   transpose: $<HTMLSelectElement>('transpose'),
-  channelsBtn: $<HTMLButtonElement>('channelsBtn'),
-  channels: $('channels'),
+  settingsBtn: $<HTMLButtonElement>('settingsBtn'),
+  settings: $('settings'),
   play: $<HTMLButtonElement>('play'),
   seek: $<HTMLInputElement>('seek'),
   time: $('time'),
@@ -171,9 +171,9 @@ ui.transpose.onchange = () => {
   options.transpose = Number(ui.transpose.value);
   rebuild();
 };
-ui.channelsBtn.onclick = () => {
-  ui.channels.hidden = !ui.channels.hidden;
-  ui.channelsBtn.classList.toggle('active', !ui.channels.hidden);
+ui.settingsBtn.onclick = () => {
+  ui.settings.hidden = !ui.settings.hidden;
+  ui.settingsBtn.classList.toggle('active', !ui.settings.hidden);
 };
 ui.fit.onchange = () => {
   if (!options) return;

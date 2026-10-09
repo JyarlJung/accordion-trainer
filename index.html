@@ -7,54 +7,58 @@
   </head>
   <body>
     <header id="toolbar">
-      <div class="bar">
-        <label class="btn">MIDI 열기<input type="file" id="file" accept=".mid,.midi" hidden /></label>
-        <span id="songName"></span>
-        <span id="tracks" class="tracks"></span>
-        <label>분할 <select id="split"></select></label>
-        <label><input type="checkbox" id="topLine" /> 최고음만</label>
-        <label><input type="checkbox" id="fit" checked /> 음역 맞춤</label>
-        <label>조옮김 <select id="transpose"></select></label>
-        <span class="sep"></span>
+      <div class="bar transport">
         <button id="play" class="primary" title="Space">▶</button>
         <input type="range" id="seek" min="0" max="1000" value="0" />
         <span id="time" class="mono">0:00 / 0:00</span>
-        <label>속도 <input type="range" id="rate" min="0.25" max="1.5" step="0.05" value="1" /></label>
-        <span id="rateLabel" class="mono">100%</span>
-        <span class="group">구간
-          <button id="loopA" title="구간 시작">A</button>
-          <button id="loopB" title="구간 끝">B</button>
-          <button id="loopClear" title="구간 해제">✕</button>
-        </span>
-        <select id="mode">
-          <option value="play">재생 모드</option>
-          <option value="wait">기다리기 모드</option>
-        </select>
+        <button id="collapse" title="툴바 접기/펼치기">▲</button>
       </div>
-      <div class="bar">
-        <label><input type="checkbox" id="sound" checked /> 곡 소리</label>
-        <label>음색 <select id="output"></select></label>
-        <label>볼륨 <input type="range" id="volume" min="0" max="1" step="0.01" value="0.8" /></label>
-        <span id="volumeLabel" class="mono">80%</span>
-        <span class="sep"></span>
-        <label>입력 <select id="midiIn"></select></label>
-        <button id="channelsBtn" title="악기 MIDI 채널 설정">⚙ 채널</button>
-        <span id="channels" class="group" hidden>
-          <label>오른손 <select id="chRight"></select></label>
-          <label>베이스 <select id="chBass"></select></label>
-          <label>코드 <select id="chChord"></select></label>
-          <span id="lastCh" class="muted"></span>
-        </span>
-        <span class="sep"></span>
-        <label><input type="checkbox" id="helpers" checked /> 4·5열</label>
-        <label><input type="checkbox" id="mirror" /> 위아래 반전</label>
-        <label><input type="checkbox" id="mirrorX" /> 좌우 반전</label>
-        <label><input type="checkbox" id="fitRange" /> 곡 음역만</label>
-        <label>줄 간격 <input type="range" id="rowGap" min="0.35" max="0.9" step="0.05" value="0.5" /></label>
-        <span id="rowGapLabel" class="mono">0.50</span>
+      <div id="toolbarBody">
+        <div class="bar">
+          <label class="btn">MIDI 열기<input type="file" id="file" accept=".mid,.midi" hidden /></label>
+          <span id="songName"></span>
+          <span id="tracks" class="tracks"></span>
+          <label>분할 <select id="split"></select></label>
+          <label><input type="checkbox" id="topLine" /> 최고음만</label>
+          <label><input type="checkbox" id="fit" checked /> 음역 맞춤</label>
+          <label>조옮김 <select id="transpose"></select></label>
+          <span class="sep"></span>
+          <label>속도 <input type="range" id="rate" min="0.25" max="1.5" step="0.05" value="1" /></label>
+          <span id="rateLabel" class="mono">100%</span>
+          <span class="group">구간
+            <button id="loopA" title="구간 시작">A</button>
+            <button id="loopB" title="구간 끝">B</button>
+            <button id="loopClear" title="구간 해제">✕</button>
+          </span>
+          <select id="mode">
+            <option value="play">재생 모드</option>
+            <option value="wait">기다리기 모드</option>
+          </select>
+        </div>
+        <div class="bar">
+          <label><input type="checkbox" id="sound" checked /> 곡 소리</label>
+          <label>볼륨 <input type="range" id="volume" min="0" max="1" step="0.01" value="0.8" /></label>
+          <span id="volumeLabel" class="mono">80%</span>
+          <span class="sep"></span>
+          <label><input type="checkbox" id="helpers" checked /> 4·5열</label>
+          <label><input type="checkbox" id="mirror" /> 위아래 반전</label>
+          <label><input type="checkbox" id="mirrorX" /> 좌우 반전</label>
+          <label><input type="checkbox" id="fitRange" /> 곡 음역만</label>
+          <label>줄 간격 <input type="range" id="rowGap" min="0.35" max="0.9" step="0.05" value="0.5" /></label>
+          <span id="rowGapLabel" class="mono">0.50</span>
+          <span class="sep"></span>
+          <button id="settingsBtn" title="음색과 악기 연결 설정">⚙ 설정</button>
+          <span id="settings" class="group" hidden>
+            <label>음색 <select id="output"></select></label>
+            <label>입력 <select id="midiIn"></select></label>
+            <label>채널 오른손 <select id="chRight"></select></label>
+            <label>베이스 <select id="chBass"></select></label>
+            <label>코드 <select id="chChord"></select></label>
+            <span id="lastCh" class="muted"></span>
+          </span>
+        </div>
       </div>
     </header>
-    <button id="collapse" title="툴바 접기/펼치기">▲</button>
     <main><canvas id="stage"></canvas></main>
     <script type="module" src="/src/main.ts"></script>
   </body>
