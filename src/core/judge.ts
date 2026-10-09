@@ -15,7 +15,7 @@ export class Judge {
   hit = 0;
   miss = 0;
   wrong = 0;
-  windowSec = 0.15; // real-time tolerance; scaled by playback rate into song time
+  windowSec = 0.2; // real-time tolerance (early or late); scaled by playback rate into song time
   lastHit: number | null = null; // id of the note matched by the latest 'hit'
   private missPtr = 0;
   private chordPtr = 0;
@@ -71,6 +71,13 @@ export class Judge {
         this.miss++;
       }
     }
+  }
+
+  // Where wait mode should stop: just past the earliest unplayed chord. The clock keeps
+  // running through the hit window, so a slightly late press doesn't break the rhythm.
+  waitPoint(rate: number): number | null {
+    const t = this.nextPendingChordTime();
+    return t === null ? null : t + this.windowSec * rate;
   }
 
   // Time of the earliest chord that still has unplayed notes.

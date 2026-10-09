@@ -402,7 +402,7 @@ const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).p
 
 function frame(now: number): void {
   const waitMode = ui.mode.value === 'wait';
-  transport.hold = waitMode ? judge.nextPendingChordTime() : null;
+  transport.hold = waitMode ? judge.waitPoint(transport.rate) : null;
   transport.tick(now);
   if (transport.playing) {
     if (loop && transport.time >= loop.b) {
