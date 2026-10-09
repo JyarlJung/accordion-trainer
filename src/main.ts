@@ -442,6 +442,7 @@ function frame(now: number): void {
     loop,
     bars: song?.bars ?? [],
     beats: song?.beats ?? [],
+    firstBar: song?.firstBar ?? 1,
     held: midi.held.right,
     bassHeld: midi.held.bass,
     chordHeld: midi.held.chord,

@@ -12,6 +12,7 @@ export interface RollState {
   loop: { a: number; b: number } | null;
   bars: number[];
   beats: number[];
+  firstBar: number; // number shown for bars[0]
 }
 
 const NOTE_ALPHA = 0.5;
@@ -66,7 +67,7 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, s: RollS
       ctx.lineTo(geo.right, y);
       ctx.stroke();
       ctx.fillStyle = '#7a7a86';
-      ctx.fillText(String(i + 1), geo.labelX, y);
+      ctx.fillText(String(s.firstBar + i), geo.labelX, y);
     });
   }
 

@@ -30,6 +30,7 @@ export interface Song {
   notes: RawNote[]; // all tracks, sorted by time then pitch (high first)
   bars: number[]; // start time of every bar, seconds
   beats: number[]; // start time of every beat, seconds
+  firstBar: number; // MIDI bar number of bars[0] (bars before it may have been trimmed)
 }
 
 export interface ExtractOptions {
@@ -67,7 +68,29 @@ export function parseSong(data: ArrayBuffer, name: string): Song {
     notes.push(...own);
     tracks.push(trackInfo(index, t.name.trim() || t.instrument.name || `트랙 ${index + 1}`, t.channel + 1, own));
   });
-  return { name, duration: midi.duration, tracks, notes: sortNotes(notes), ...beatGrid(midi) };
+  return trimLeadIn({ name, duration: midi.duration, tracks, notes: sortNotes(notes), firstBar: 1, ...beatGrid(midi) });
+}
+
+const MAX_LEAD_BARS = 2; // empty bars kept before the first note
+
+// Many MIDI files start with long silence; keep at most MAX_LEAD_BARS empty bars of it.
+function trimLeadIn(song: Song): Song {
+  if (song.notes.length === 0) return song;
+  const first = song.notes[0].time;
+  let firstNoteBar = 0;
+  while (firstNoteBar + 1 < song.bars.length && song.bars[firstNoteBar + 1] <= first + 1e-6) firstNoteBar++;
+  const cut = firstNoteBar - MAX_LEAD_BARS;
+  if (cut <= 0) return song;
+  const offset = song.bars[cut];
+  const shift = (t: number) => t - offset;
+  return {
+    ...song,
+    duration: song.duration - offset,
+    notes: song.notes.map(n => ({ ...n, time: shift(n.time) })),
+    bars: song.bars.slice(cut).map(shift),
+    beats: song.beats.filter(t => t >= offset - 1e-6).map(shift),
+    firstBar: song.firstBar + cut,
+  };
 }
 
 // Bar and beat start times, following time-signature changes (tempo is handled by ticksToSeconds).
