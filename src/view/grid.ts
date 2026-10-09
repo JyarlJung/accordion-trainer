@@ -91,6 +91,7 @@ export function drawGrid(
   }
 
   for (const b of layout.buttons) {
+    if (b.note < geo.lo || b.note > geo.hi) continue;
     const { x, y } = geo.pos(b);
     const m = marks.get(b.id);
     ctx.globalAlpha = m?.alpha ?? (b.role === 'helper' && !m ? (showHelpers ? 0.55 : 0.18) : 1);

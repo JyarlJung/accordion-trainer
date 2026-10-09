@@ -1,6 +1,11 @@
 import * as Tone from 'tone';
 import type { MidiIO } from './midi';
 
+// Master volume for the app's own sounds (sampler and synth), 0..1.
+export function setVolume(v: number): void {
+  Tone.getDestination().volume.value = v <= 0 ? -Infinity : Tone.gainToDb(v);
+}
+
 export interface NoteSink {
   noteOn(note: number, velocity: number): void;
   noteOff(note: number): void;

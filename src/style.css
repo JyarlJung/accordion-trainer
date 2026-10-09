@@ -72,8 +72,8 @@ button:hover, .btn:hover { background: #34343f; }
 button.primary { background: var(--accent); border-color: var(--accent); min-width: 40px; }
 button.active { outline: 2px solid #ffd54f; }
 
-#seek, #rate, #rowGap { width: 100%; }
-label:has(#rate), label:has(#rowGap) { flex: 1; }
+#seek, #rate, #rowGap, #volume { width: 100%; }
+label:has(#rate), label:has(#rowGap), label:has(#volume) { flex: 1; }
 select { max-width: 100%; }
 #midiIn, #output { flex: 1; min-width: 0; }
 

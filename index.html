@@ -45,6 +45,10 @@
         <h2>소리</h2>
         <label><input type="checkbox" id="sound" checked /> 곡 소리</label>
         <label>음색 <select id="output"></select></label>
+        <div class="row">
+          <label>볼륨 <input type="range" id="volume" min="0" max="1" step="0.01" value="0.8" /></label>
+          <span id="volumeLabel" class="mono">80%</span>
+        </div>
       </section>
       <section>
         <h2>악기 (MIDI)</h2>
@@ -61,6 +65,7 @@
         <label><input type="checkbox" id="helpers" checked /> 4·5열 표시</label>
         <label><input type="checkbox" id="mirror" /> 위아래 반전</label>
         <label><input type="checkbox" id="mirrorX" /> 좌우 반전</label>
+        <label><input type="checkbox" id="fitRange" /> 곡 음역만 보기</label>
         <div class="row">
           <label>줄 간격 <input type="range" id="rowGap" min="0.35" max="0.9" step="0.05" value="0.5" /></label>
           <span id="rowGapLabel" class="mono">0.50</span>

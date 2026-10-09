@@ -5,9 +5,11 @@ export interface GeometryOptions {
   flipY: boolean; // reverse the row order of both boards
   flipX: boolean; // mirror everything left-right
   rowGap: number; // distance between treble rows, in button pitches
+  range: { lo: number; hi: number } | null; // treble notes to show; null = the whole keyboard
 }
 
-const PAD = 16;
+const PAD_X = 40;
+const PAD_Y = 20;
 const LABEL = 30; // row labels left of each board
 const ROLL_MIN = 0.25; // share of the height kept for the falling notes
 const BOARD_GAP = 0.35; // space around the bellows meter, in button pitches
@@ -15,6 +17,7 @@ const METER = 0.3;
 const BUTTON = 0.46; // treble button radius as a fraction of a semitone lane
 const BASS_LANES = 1.1; // bass button pitch in treble lanes: about treble-button sized, since it doesn't line up with notes
 const BASS_ROW_GAP = 0.9;
+const BASS_MAX_WIDTH = 0.55; // cap the bass board at this share of the width, so zooming the treble doesn't inflate it
 const MAX_PITCH = 140;
 
 // Top to bottom: falling notes, treble board, bellows meter, bass board. This is the
@@ -23,6 +26,8 @@ const MAX_PITCH = 140;
 // that runs through its button, so notes fall onto their own button and row.
 export class Geometry {
   readonly pitch: number; // distance between neighbouring buttons in a row
+  readonly lo: number; // lowest treble note on screen
+  readonly hi: number;
   readonly lane: number; // width of one semitone lane
   readonly radius: number;
   readonly rowGap: number;
@@ -56,7 +61,9 @@ export class Geometry {
     this.bassRows = bass.def.rows.length;
     this.bassSlant = bass.def.rowSlant;
     const semis = layout.def.semitonesPerButton;
-    const rhSpan = Math.max(...layout.buttons.map(b => b.y)) + 1;
+    this.lo = opts.range?.lo ?? layout.minNote;
+    this.hi = opts.range?.hi ?? layout.maxNote;
+    const rhSpan = (this.hi - this.lo) / semis + 1;
     const bassSpan = bass.columns + this.bassSlant * (this.bassRows - 1);
     const g = opts.rowGap;
     const rhUnits = (layout.rows.length - 1) * g + (2 * BUTTON) / semis;
@@ -64,10 +71,10 @@ export class Geometry {
     const bassUnits = ((this.bassRows - 1) * BASS_ROW_GAP + 0.92) * bassScale;
     const stack = rhUnits + BOARD_GAP + METER + BOARD_GAP + bassUnits;
 
-    this.left = PAD + LABEL;
-    this.right = width - PAD;
-    this.labelX = PAD + LABEL / 2;
-    const availW = this.right - this.left, availH = height - 2 * PAD;
+    this.left = PAD_X + LABEL;
+    this.right = width - PAD_X;
+    this.labelX = PAD_X + LABEL / 2;
+    const availW = this.right - this.left, availH = height - 2 * PAD_Y;
     // Lanes lean by rowShift buttons per row, so the roll's height adds sideways extent:
     // width = span * p + rollHeight * k, with rollHeight = availH - stack * p.
     const k = Math.abs(layout.rowShift) / g;
@@ -78,12 +85,12 @@ export class Geometry {
     this.lane = p / semis;
     this.radius = this.lane * BUTTON;
     this.rowGap = p * g;
-    this.bassPitch = p * bassScale;
+    this.bassPitch = Math.min(p * bassScale, (availW * BASS_MAX_WIDTH) / bassSpan);
     this.bassRadius = this.bassPitch * 0.46;
     this.bassRowGap = this.bassPitch * BASS_ROW_GAP;
 
     // Stack from the bottom up; the roll takes whatever is left on top.
-    this.bassRowsTop = height - PAD - ((this.bassRows - 1) * this.bassRowGap + this.bassRadius * 2);
+    this.bassRowsTop = height - PAD_Y - ((this.bassRows - 1) * this.bassRowGap + this.bassRadius * 2);
     this.meterH = p * METER;
     this.meterY = this.bassRowsTop - p * BOARD_GAP - this.meterH;
     this.rhRowsTop = this.meterY - p * BOARD_GAP - ((layout.rows.length - 1) * this.rowGap + this.radius * 2);
@@ -99,13 +106,13 @@ export class Geometry {
     this.bassOrder.forEach((r, i) => this.bassLine.set(r, this.bassRowsTop + this.bassRadius + i * this.bassRowGap));
 
     const mainLines = layout.rows.filter(r => r.role === 'main').map(r => this.landY(r.row));
-    this.rollTop = PAD;
+    this.rollTop = PAD_Y;
     this.rollBottom = Math.min(...mainLines);
     this.lanesBottom = Math.max(...mainLines) + this.radius * 2;
     this.shear = (layout.rowShift * p) / (this.rowLineY(2) - this.rowLineY(1));
 
     // Centre the whole lane fan (boards plus the leaning roll) horizontally.
-    const xs = [layout.minNote, layout.maxNote].flatMap(n => [this.rollTop, this.lanesBottom].map(y => this.laneXFrom(0, n, y)));
+    const xs = [this.lo, this.hi].flatMap(n => [this.rollTop, this.lanesBottom].map(y => this.laneXFrom(0, n, y)));
     const extent = Math.max(...xs) - Math.min(...xs) + this.lane;
     this.rhX0 = this.left + (availW - extent) / 2 + this.lane / 2 - Math.min(...xs);
     this.bassX0 = this.left + (availW - bassSpan * this.bassPitch) / 2 + this.bassPitch / 2;

@@ -15,6 +15,7 @@ export interface ViewState extends RollState {
   mirror: boolean; // flip top-bottom
   mirrorX: boolean; // flip left-right
   rowGap: number; // treble row spacing, in button pitches
+  range: { lo: number; hi: number } | null; // treble notes to show; null = all
 }
 
 const FLASH_MS = 400;
@@ -45,9 +46,9 @@ export class Stage {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(h * dpr);
     }
-    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}`;
+    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}:${s.range?.lo}-${s.range?.hi}`;
     if (!this.geo || key !== this.geoKey) {
-      this.geo = new Geometry(this.layout, this.bass, w, h, { flipY: s.mirror, flipX: s.mirrorX, rowGap: s.rowGap });
+      this.geo = new Geometry(this.layout, this.bass, w, h, { flipY: s.mirror, flipX: s.mirrorX, rowGap: s.rowGap, range: s.range });
       this.geoKey = key;
     }
     const ctx = this.ctx;

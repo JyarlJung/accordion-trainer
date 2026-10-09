@@ -8,7 +8,7 @@ import { demoSong } from './core/demo';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { MidiIO } from './io/midi';
-import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, type NoteSink } from './io/audio';
+import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, setVolume, type NoteSink } from './io/audio';
 import { userSampleSets } from './io/sampleSets';
 import { Stage } from './view/stage';
 
@@ -41,6 +41,9 @@ const ui = {
   mirror: $<HTMLInputElement>('mirror'),
   mirrorX: $<HTMLInputElement>('mirrorX'),
   rowGap: $<HTMLInputElement>('rowGap'),
+  fitRange: $<HTMLInputElement>('fitRange'),
+  volume: $<HTMLInputElement>('volume'),
+  volumeLabel: $('volumeLabel'),
   rowGapLabel: $('rowGapLabel'),
 };
 
@@ -61,6 +64,24 @@ let nextIdx = 0; // next song note to sound
 const sounding = new Map<number, SongNote>();
 let loopStart: number | null = null;
 let loop: { a: number; b: number } | null = null;
+let songRange: { lo: number; hi: number } | null = null;
+
+const RANGE_MARGIN = 2; // semitones shown beyond the song's lowest and highest notes
+const RANGE_MIN = 30; // never zoom in to less than two and a half octaves
+
+// Treble range to show when "song range only" is on: the song's notes plus a margin,
+// widened to RANGE_MIN and kept inside the keyboard.
+function rangeFor(list: SongNote[]): { lo: number; hi: number } | null {
+  if (list.length === 0) return null;
+  let lo = Math.min(...list.map(n => n.note)) - RANGE_MARGIN;
+  let hi = Math.max(...list.map(n => n.note)) + RANGE_MARGIN;
+  const grow = Math.max(0, RANGE_MIN - (hi - lo));
+  lo -= Math.floor(grow / 2);
+  hi += Math.ceil(grow / 2);
+  if (lo < layout.minNote) [lo, hi] = [layout.minNote, hi + layout.minNote - lo];
+  if (hi > layout.maxNote) [lo, hi] = [lo - (hi - layout.maxNote), layout.maxNote];
+  return { lo: Math.max(lo, layout.minNote), hi: Math.min(hi, layout.maxNote) };
+}
 
 // ---------- song ----------
 
@@ -89,6 +110,7 @@ async function loadFile(file: File): Promise<void> {
 function rebuild(t = transport.time): void {
   if (!song || !options) return;
   notes = extractNotes(song, options, { min: layout.minNote, max: layout.maxNote });
+  songRange = rangeFor(notes);
   judge = new Judge(notes);
   transport.duration = song.duration;
   seek(t, true);
@@ -205,6 +227,11 @@ ui.loopB.onclick = () => {
   seek(loop.a, true);
 };
 ui.loopClear.onclick = clearLoop;
+ui.volume.oninput = () => {
+  setVolume(Number(ui.volume.value));
+  ui.volumeLabel.textContent = `${Math.round(Number(ui.volume.value) * 100)}%`;
+};
+setVolume(Number(ui.volume.value));
 ui.rowGap.oninput = () => {
   ui.rowGapLabel.textContent = Number(ui.rowGap.value).toFixed(2);
 };
@@ -355,6 +382,7 @@ function frame(now: number): void {
     mirror: ui.mirror.checked,
     mirrorX: ui.mirrorX.checked,
     rowGap: Number(ui.rowGap.value),
+    range: ui.fitRange.checked ? songRange : null,
   });
 
   if (document.activeElement !== ui.seek && transport.duration > 0) {

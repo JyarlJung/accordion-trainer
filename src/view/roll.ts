@@ -18,7 +18,7 @@ const NOTE_ALPHA = 0.5;
 // Background: one diagonal lane per semitone, and a judgment line on top of each row.
 export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
   const y0 = geo.rollTop, y1 = geo.lanesBottom, w = geo.lane;
-  for (let note = layout.minNote; note <= layout.maxNote; note++) {
+  for (let note = geo.lo; note <= geo.hi; note++) {
     const a = geo.laneX(note, y0), b = geo.laneX(note, y1);
     if (isBlack(note)) {
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
