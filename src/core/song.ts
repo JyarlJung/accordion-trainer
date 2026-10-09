@@ -28,6 +28,8 @@ export interface Song {
   duration: number;
   tracks: TrackInfo[];
   notes: RawNote[]; // all tracks, sorted by time then pitch (high first)
+  bars: number[]; // start time of every bar, seconds
+  beats: number[]; // start time of every beat, seconds
 }
 
 export interface ExtractOptions {
@@ -65,7 +67,29 @@ export function parseSong(data: ArrayBuffer, name: string): Song {
     notes.push(...own);
     tracks.push(trackInfo(index, t.name.trim() || t.instrument.name || `트랙 ${index + 1}`, t.channel + 1, own));
   });
-  return { name, duration: midi.duration, tracks, notes: sortNotes(notes) };
+  return { name, duration: midi.duration, tracks, notes: sortNotes(notes), ...beatGrid(midi) };
+}
+
+// Bar and beat start times, following time-signature changes (tempo is handled by ticksToSeconds).
+function beatGrid(midi: Midi): { bars: number[]; beats: number[] } {
+  const ppq = midi.header.ppq;
+  const sigs = midi.header.timeSignatures.length
+    ? [...midi.header.timeSignatures].sort((a, b) => a.ticks - b.ticks)
+    : [{ ticks: 0, timeSignature: [4, 4] }];
+  const end = Math.max(midi.durationTicks, ppq);
+  const bars: number[] = [];
+  const beats: number[] = [];
+  let tick = 0;
+  let i = 0;
+  while (tick <= end) {
+    while (i + 1 < sigs.length && sigs[i + 1].ticks <= tick) i++;
+    const [num, den] = sigs[i].timeSignature;
+    const beatTicks = (ppq * 4) / den;
+    bars.push(midi.header.ticksToSeconds(tick));
+    for (let b = 0; b < num; b++) beats.push(midi.header.ticksToSeconds(tick + b * beatTicks));
+    tick += beatTicks * num;
+  }
+  return { bars, beats };
 }
 
 const RIGHT_HAND_NAME = /right|\br\.?h\b|treble|melody|오른/i;

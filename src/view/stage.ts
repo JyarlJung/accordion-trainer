@@ -13,14 +13,13 @@ export interface ViewState extends RollState {
   chordHeld: ReadonlyMap<number, number>;
   pressure: number; // bellows, 0..1
   showHelpers: boolean; // rows 4-5
-  showUpcoming: boolean; // number the next few chords' buttons
+  showUpcoming: boolean; // outline the next chord's buttons
   mirror: boolean; // flip top-bottom
   mirrorX: boolean; // flip left-right
   rowGap: number; // treble row spacing, in button pitches
   range: { lo: number; hi: number } | null; // treble notes to show; null = all
 }
 
-const UPCOMING_CHORDS = 3;
 const FLASH_MS = 400;
 const ONSET_FLASH = 0.12; // seconds of song time
 
@@ -100,17 +99,12 @@ export class Stage {
     const set = (id: string, m: Mark) => marks.set(id, { ...marks.get(id), ...m });
     const t = s.time;
 
-    // Upcoming chords: numbered outlines, fading with distance.
+    // The very next chord's buttons get an outline.
     if (s.showUpcoming) {
-      let k = 0;
-      for (const c of s.judge.chords) {
-        if (c.time <= t + 0.02) continue;
-        if (k >= UPCOMING_CHORDS) break;
-        for (const id of c.ids) {
-          const b = this.layout.primary(s.notes[id].note);
-          if (b && !marks.has(b.id)) set(b.id, { ring: UPCOMING, badge: k + 1, alpha: 1 - k * 0.25 });
-        }
-        k++;
+      const next = s.judge.chords.find(c => c.time > t + 0.02);
+      for (const id of next?.ids ?? []) {
+        const b = this.layout.primary(s.notes[id].note);
+        if (b) set(b.id, { ring: UPCOMING, alpha: 1 });
       }
     }
 

@@ -31,6 +31,7 @@ const ui = {
   loopA: $<HTMLButtonElement>('loopA'),
   loopB: $<HTMLButtonElement>('loopB'),
   loopClear: $<HTMLButtonElement>('loopClear'),
+  loopUnit: $<HTMLSelectElement>('loopUnit'),
   mode: $<HTMLSelectElement>('mode'),
   sound: $<HTMLInputElement>('sound'),
   output: $<HTMLSelectElement>('output'),
@@ -240,15 +241,24 @@ ui.rate.oninput = () => {
   transport.rate = Number(ui.rate.value);
   ui.rateLabel.textContent = `${Math.round(transport.rate * 100)}%`;
 };
+// Loop points snap to the bar or beat grid: A to the start of the unit it's in, B to its end.
+function loopGrid(): number[] {
+  return (ui.loopUnit.value === 'beat' ? song?.beats : song?.bars) ?? [];
+}
+
 ui.loopA.onclick = () => {
-  loopStart = transport.time;
+  const grid = loopGrid();
+  loopStart = grid.filter(g => g <= transport.time + 1e-3).pop() ?? transport.time;
   loop = null;
   ui.loopA.classList.add('active');
   ui.loopB.classList.remove('active');
 };
 ui.loopB.onclick = () => {
-  if (loopStart === null || transport.time <= loopStart) return;
-  loop = { a: loopStart, b: transport.time };
+  if (loopStart === null) return;
+  const start = loopStart;
+  const end = loopGrid().find(g => g > Math.max(transport.time, start) + 1e-3) ?? transport.duration;
+  if (end <= start) return;
+  loop = { a: start, b: end };
   ui.loopB.classList.add('active');
   seek(loop.a, true);
 };
@@ -364,6 +374,7 @@ ui.output.onchange = () => {
 persist(ui.volume, 'volume', applyVolume);
 persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.mode, 'mode');
+persist(ui.loopUnit, 'loopUnit');
 for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
   persist(el, key);
 }
@@ -429,6 +440,8 @@ function frame(now: number): void {
     judge,
     lookahead: 4,
     loop,
+    bars: song?.bars ?? [],
+    beats: song?.beats ?? [],
     held: midi.held.right,
     bassHeld: midi.held.bass,
     chordHeld: midi.held.chord,

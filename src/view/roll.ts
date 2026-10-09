@@ -10,6 +10,8 @@ export interface RollState {
   judge: Judge;
   lookahead: number; // seconds of travel from the top to the highest judgment line
   loop: { a: number; b: number } | null;
+  bars: number[];
+  beats: number[];
 }
 
 const NOTE_ALPHA = 0.5;
@@ -36,6 +38,36 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, s: RollS
     ctx.moveTo(a - side, y0);
     ctx.lineTo(b - side, y1);
     ctx.stroke();
+  }
+
+  // Bar lines (with bar numbers) and faint beat lines across the roll.
+  {
+    const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;
+    const toY = (t: number) => geo.rollBottom - (t - s.time) * pps;
+    ctx.lineWidth = 1;
+    for (const t of s.beats) {
+      const y = toY(t);
+      if (y > geo.rollBottom || y < geo.rollTop) continue;
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath();
+      ctx.moveTo(geo.left, y);
+      ctx.lineTo(geo.right, y);
+      ctx.stroke();
+    }
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    s.bars.forEach((t, i) => {
+      const y = toY(t);
+      if (y > geo.rollBottom || y < geo.rollTop) return;
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.beginPath();
+      ctx.moveTo(geo.left, y);
+      ctx.lineTo(geo.right, y);
+      ctx.stroke();
+      ctx.fillStyle = '#7a7a86';
+      ctx.fillText(String(i + 1), geo.labelX, y);
+    });
   }
 
   if (s.loop) {
