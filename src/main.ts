@@ -6,7 +6,7 @@ import { Layout, noteName, type LayoutDef } from './core/layout';
 import { extractNotes, guessOptions, lowerBound, parseSong, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
-import { pressInWaitMode } from './core/practice';
+import { WaitMode, pressInWaitMode } from './core/practice';
 import { MidiIO } from './io/midi';
 import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, setVolume, type NoteSink } from './io/audio';
 import { userSampleSets } from './io/sampleSets';
@@ -46,6 +46,8 @@ const ui = {
   mirrorX: $<HTMLInputElement>('mirrorX'),
   rowGap: $<HTMLInputElement>('rowGap'),
   fitRange: $<HTMLInputElement>('fitRange'),
+  hitWindow: $<HTMLInputElement>('hitWindow'),
+  hitWindowLabel: $('hitWindowLabel'),
   upcoming: $<HTMLInputElement>('upcoming'),
   volume: $<HTMLInputElement>('volume'),
   volumeLabel: $('volumeLabel'),
@@ -65,6 +67,7 @@ let song: Song | null = null;
 let options: ExtractOptions | null = null;
 let notes: SongNote[] = [];
 let judge = new Judge([]);
+const waiter = new WaitMode();
 let nextIdx = 0; // next song note to sound
 const sounding = new Map<number, SongNote>();
 let loopStart: number | null = null;
@@ -120,6 +123,7 @@ function rebuild(t = transport.time): void {
   notes = extractNotes(song, options, { min: layout.minNote, max: layout.maxNote });
   songRange = rangeFor(notes);
   judge = new Judge(notes, n => layout.primary(n) !== undefined);
+  judge.windowSec = hitWindow();
   transport.duration = song.duration;
   seek(t, true);
 }
@@ -129,6 +133,7 @@ function seek(t: number, resetStats = false): void {
   silence();
   nextIdx = lowerBound(notes, transport.time);
   judge.resetFrom(transport.time, resetStats);
+  waiter.reset();
 }
 
 function silence(): void {
@@ -269,6 +274,16 @@ function applyVolume(): void {
   ui.volumeLabel.textContent = `${Math.round(Number(ui.volume.value) * 100)}%`;
 }
 ui.volume.oninput = applyVolume;
+// Hit window, ms on the slider, seconds in the judge.
+function hitWindow(): number {
+  return Number(ui.hitWindow.value) / 1000;
+}
+function applyHitWindow(): void {
+  judge.windowSec = hitWindow();
+  ui.hitWindowLabel.textContent = `${ui.hitWindow.value}ms`;
+}
+ui.hitWindow.oninput = applyHitWindow;
+
 function applyRowGap(): void {
   ui.rowGapLabel.textContent = Number(ui.rowGap.value).toFixed(2);
 }
@@ -374,6 +389,7 @@ ui.output.onchange = () => {
 // Restore the remembered settings (song-specific options are left out on purpose).
 persist(ui.volume, 'volume', applyVolume);
 persist(ui.rowGap, 'rowGap', applyRowGap);
+persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.mode, 'mode');
 persist(ui.loopUnit, 'loopUnit');
 for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
@@ -406,8 +422,12 @@ const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).p
 
 function frame(now: number): void {
   const waitMode = ui.mode.value === 'wait';
-  transport.hold = waitMode ? judge.waitPoint(transport.rate) : null;
-  transport.tick(now);
+  if (waitMode) {
+    waiter.tick(judge, transport, now);
+  } else {
+    transport.hold = null;
+    transport.tick(now);
+  }
   if (transport.playing) {
     if (loop && transport.time >= loop.b) {
       seek(loop.a);

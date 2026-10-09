@@ -81,13 +81,6 @@ export class Judge {
     }
   }
 
-  // Where wait mode should stop: just past the earliest unplayed chord. The clock keeps
-  // running through the hit window, so a slightly late press doesn't break the rhythm.
-  waitPoint(rate: number): number | null {
-    const t = this.nextPendingChordTime();
-    return t === null ? null : t + this.windowSec * rate;
-  }
-
   // Time of the earliest chord that still has unplayed notes.
   nextPendingChordTime(): number | null {
     for (; this.chordPtr < this.chords.length; this.chordPtr++) {
