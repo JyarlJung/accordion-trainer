@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Accordion Trainer</title>
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <label class="btn">MIDI 열기<input type="file" id="file" accept=".mid,.midi" hidden /></label>
+        <button id="demo">데모</button>
+        <span id="songName" class="muted">MIDI 파일을 창에 끌어다 놓아도 됩니다</span>
+        <span class="sep"></span>
+        <span id="tracks" class="tracks"></span>
+        <label>분할 <select id="split"></select></label>
+        <label><input type="checkbox" id="topLine" /> 최고음만</label>
+        <label><input type="checkbox" id="fit" checked /> 음역 맞춤</label>
+      </div>
+      <div class="bar">
+        <button id="play" class="primary" title="Space">▶</button>
+        <input type="range" id="seek" min="0" max="1000" value="0" />
+        <span id="time" class="mono">0:00 / 0:00</span>
+        <label>속도 <input type="range" id="rate" min="0.25" max="1.5" step="0.05" value="1" /></label>
+        <span id="rateLabel" class="mono">100%</span>
+        <button id="loopA" title="구간 시작">A</button>
+        <button id="loopB" title="구간 끝">B</button>
+        <button id="loopClear" title="구간 해제">✕</button>
+        <select id="mode">
+          <option value="play">재생</option>
+          <option value="wait">기다리기</option>
+        </select>
+        <span class="sep"></span>
+        <label><input type="checkbox" id="sound" checked /> 곡 소리</label>
+        <label>음색 <select id="output"></select></label>
+        <span class="sep"></span>
+        <label>입력 <select id="midiIn"></select></label>
+        <label>채널 <select id="midiCh"></select></label>
+        <span id="lastCh" class="muted"></span>
+        <span class="sep"></span>
+        <label><input type="checkbox" id="helpers" checked /> 4·5열</label>
+        <label><input type="checkbox" id="mirror" /> 좌우 반전</label>
+        <span id="stats" class="mono"></span>
+      </div>
+    </header>
+    <main><canvas id="stage"></canvas></main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

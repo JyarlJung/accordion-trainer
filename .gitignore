@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Local sample sets (may contain copyrighted game audio)
+samples/
