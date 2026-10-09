@@ -2,7 +2,7 @@ import type { BassLayout } from '../core/bassLayout';
 import type { Layout } from '../core/layout';
 import type { HitResult } from '../core/judge';
 import { drawBass, drawBellows } from './bass';
-import { DUPLICATE, EXPECT, HIT, LIVE, MISSED, UPCOMING } from './colors';
+import { DUPLICATE, EXPECT, HIT, LIVE, MISSED, ONSET, UPCOMING } from './colors';
 import { Geometry } from './geometry';
 import { drawGrid, type Mark } from './grid';
 import { drawRoll, type RollState } from './roll';
@@ -18,6 +18,7 @@ export interface ViewState extends RollState {
 
 const UPCOMING_CHORDS = 3;
 const FLASH_MS = 400;
+const ONSET_FLASH = 0.12; // seconds of song time
 
 export class Stage {
   private readonly ctx: CanvasRenderingContext2D;
@@ -101,7 +102,10 @@ export class Stage {
       if (!primary) continue;
       expected.add(n.note);
       const state = s.judge.state[n.id];
-      set(primary.id, { fill: state === 'hit' ? HIT : state === 'missed' ? MISSED : EXPECT, badge: undefined, alpha: 1 });
+      const fill = state === 'hit' ? HIT : state === 'missed' ? MISSED : EXPECT;
+      // Briefly flash at each onset so a repeated note reads as a new press.
+      const onset = t - n.time < ONSET_FLASH && state !== 'hit';
+      set(primary.id, { fill: onset ? ONSET : fill, ring: onset ? '#fff' : undefined, badge: undefined, alpha: 1 });
       if (s.showHelpers) for (const d of dups) set(d.id, { ring: DUPLICATE, alpha: 1 });
     }
 

@@ -59,6 +59,8 @@ export const BUILTIN_SETS: SampleSet[] = [{
   urls: Object.fromEntries([3, 4, 5, 6, 7].flatMap(o => ['C', 'Eb', 'Gb', 'A'].map(n => [`${n}${o}`, `${n}${o}.mp3`]))),
 }];
 
+const RETRIGGER_GAP = 0.025; // seconds
+
 interface Voice {
   src: Tone.ToneBufferSource;
   gain: Tone.Gain;
@@ -113,25 +115,30 @@ export class SamplerSink implements NoteSink {
 
   noteOn(note: number, velocity: number): void {
     if (this.samples.length === 0) return;
-    this.noteOff(note);
+    // Re-striking a sounding pitch: cut the old voice fast and leave a short gap so the repeat is audible.
+    const retrigger = this.voices.has(note) ? RETRIGGER_GAP : 0;
+    this.release(note, retrigger || (this.set?.release ?? 0.12));
     this.out ??= new Tone.Gain(0.8).toDestination();
     const s = this.samples.reduce((a, b) => (Math.abs(b.root - note) < Math.abs(a.root - note) ? b : a));
     const src = new Tone.ToneBufferSource({ url: s.buffer, loop: true, loopStart: s.loopStart, loopEnd: s.loopEnd });
     src.playbackRate.value = 2 ** ((note - s.root) / 12);
     const gain = new Tone.Gain(0).connect(this.out);
     src.connect(gain);
-    const now = Tone.now();
-    gain.gain.linearRampToValueAtTime(velocity, now + 0.01);
-    src.start(now);
+    const start = Tone.now() + retrigger;
+    gain.gain.setValueAtTime(0, start).linearRampToValueAtTime(velocity, start + 0.01);
+    src.start(start);
     this.voices.set(note, { src, gain });
   }
 
   noteOff(note: number): void {
+    this.release(note, this.set?.release ?? 0.12);
+  }
+
+  private release(note: number, rel: number): void {
     const v = this.voices.get(note);
     if (!v) return;
     this.voices.delete(note);
     const now = Tone.now();
-    const rel = this.set?.release ?? 0.12;
     v.gain.gain.cancelScheduledValues(now).setValueAtTime(v.gain.gain.value, now).linearRampToValueAtTime(0, now + rel);
     v.src.onended = () => {
       v.src.dispose();

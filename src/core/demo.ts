@@ -23,6 +23,11 @@ export function demoSong(): Song {
     for (const n of chord) add(right, n, t, beat * 1.8, 0);
     t += beat * 2;
   }
+  // Back-to-back repeats with no gap: each should still sound and show as a new press.
+  for (const n of [67, 67, 67, 72]) {
+    add(right, n, t, beat, 0);
+    t += beat;
+  }
   for (let bt = 0; bt < t; bt += beat * 2) add(left, bt % (beat * 4) === 0 ? 36 : 43, bt, beat * 0.9, 1);
 
   return {

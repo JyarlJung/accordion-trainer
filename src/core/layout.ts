@@ -73,4 +73,10 @@ export class Layout {
   primary(note: number): KeyButton | undefined {
     return this.byNote.get(note)?.[0];
   }
+
+  // Screen height of a pitch, in button units. Linear in pitch, so every semitone gets its own
+  // height; this slants the columns 1/6 button apart, tracing the chromatic diagonal.
+  pitchY(note: number): number {
+    return (note - this.minNote) / this.def.semitonesPerButton;
+  }
 }

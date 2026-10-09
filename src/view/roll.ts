@@ -1,4 +1,4 @@
-import { noteName, type Layout } from '../core/layout';
+import { isBlack, noteName, type Layout } from '../core/layout';
 import type { Judge } from '../core/judge';
 import type { SongNote } from '../core/song';
 import { HELPER_ONLY, HIT, ROW_COLORS } from './colors';
@@ -22,15 +22,18 @@ export function drawRoll(ctx: CanvasRenderingContext2D, geo: Geometry, layout: L
   ctx.fillStyle = 'rgba(255,255,255,0.03)';
   ctx.fillRect(x0, geo.rhTop, x1 - x0, geo.rhBottom - geo.rhTop);
 
-  // One guide line per button height.
-  const levels = [...new Set(layout.buttons.map(b => b.y))];
-  ctx.lineWidth = 1;
-  for (const y of levels) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.beginPath();
-    ctx.moveTo(x0, geo.rowY(y));
-    ctx.lineTo(x1, geo.rowY(y));
-    ctx.stroke();
+  // One lane per semitone, piano-roll style: black-key lanes darker, a line under each C.
+  const lane = geo.pitch / 3;
+  for (let note = layout.minNote; note <= layout.maxNote; note++) {
+    const y = geo.rowY(layout.pitchY(note));
+    if (isBlack(note)) {
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(x0, y - lane / 2, x1 - x0, lane);
+    }
+    if (note % 12 === 0) {
+      ctx.fillStyle = 'rgba(201,162,39,0.35)';
+      ctx.fillRect(x0, y - lane / 2, x1 - x0, 1);
+    }
   }
 
   if (s.loop) {
@@ -41,25 +44,26 @@ export function drawRoll(ctx: CanvasRenderingContext2D, geo: Geometry, layout: L
     }
   }
 
-  const h = geo.radius * 0.8;
+  const h = lane * 0.86;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = `600 ${Math.max(10, h * 0.62)}px system-ui, sans-serif`;
+  ctx.font = `600 ${Math.max(9, h * 0.78)}px system-ui, sans-serif`;
   for (const n of s.notes) {
     if (n.time > s.time + s.lookahead) break;
     const xa = Math.max(x0, toX(n.time));
-    const xb = Math.min(x1, toX(n.time) + Math.max(n.duration * pps, 4));
+    // A small gap at the end keeps repeated notes of the same pitch visibly separate.
+    const xb = Math.min(x1, toX(n.time) + Math.max(n.duration * pps - 2, 3));
     if (xb <= x0) continue;
     const b = layout.primary(n.note);
     if (!b) continue;
-    const y = geo.rowY(b.y);
+    const y = geo.rowY(layout.pitchY(n.note));
     const state = s.judge.state[n.id];
     ctx.globalAlpha = state === 'missed' || state === 'skipped' ? 0.35 : 1;
     ctx.fillStyle = state === 'hit' ? HIT : b.role === 'main' ? ROW_COLORS[b.row] : HELPER_ONLY;
     ctx.beginPath();
     ctx.roundRect(xa, y - h / 2, xb - xa, h, h * 0.3);
     ctx.fill();
-    if (xb - xa > 30) {
+    if (xb - xa > 26) {
       ctx.fillStyle = '#111';
       ctx.fillText(noteName(n.note), xa + 4, y + 0.5);
     }

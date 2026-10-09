@@ -2,6 +2,7 @@ export const ROW_COLORS: Record<number, string> = { 1: '#ff8a65', 2: '#4fc3f7', 
 export const HELPER_ONLY = '#ffd54f';
 
 export const EXPECT = '#e53935'; // press now (main rows)
+export const ONSET = '#ff8a80'; // first moment of a note, so repeats stand out
 export const DUPLICATE = '#fb8c00'; // same pitch on helper rows
 export const HIT = '#43a047';
 export const MISSED = '#7f3b3b';

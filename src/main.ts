@@ -301,18 +301,19 @@ function frame(now: number): void {
   }
   const t = transport.time;
 
+  // Release ended notes before starting new ones, and only when no newer note of the same
+  // pitch has taken over; otherwise back-to-back repeats would cut each other off.
+  for (const [id, n] of sounding) {
+    if (n.time + n.duration > t) continue;
+    sounding.delete(id);
+    if (![...sounding.values()].some(o => o.note === n.note)) sink.noteOff(n.note);
+  }
   const sound = ui.sound.checked && transport.playing;
   while (nextIdx < notes.length && notes[nextIdx].time <= t) {
     const n = notes[nextIdx++];
     if (sound) {
       sink.noteOn(n.note, n.velocity);
       sounding.set(n.id, n);
-    }
-  }
-  for (const [id, n] of sounding) {
-    if (n.time + n.duration <= t) {
-      sink.noteOff(n.note);
-      sounding.delete(id);
     }
   }
   if (!waitMode && transport.playing) judge.update(t, transport.rate);

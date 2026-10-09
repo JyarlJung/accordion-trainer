@@ -31,8 +31,8 @@ export class Geometry {
   private readonly bassSlant: number;
   private readonly bassRows: number;
 
-  constructor(layout: Layout, bass: BassLayout, readonly width: number, readonly height: number, mirror: boolean) {
-    const rhLevels = Math.max(...layout.buttons.map(b => b.y)) + 1;
+  constructor(private readonly layout: Layout, bass: BassLayout, readonly width: number, readonly height: number, mirror: boolean) {
+    const rhLevels = layout.pitchY(layout.maxNote) + 1;
     this.bassRows = bass.def.rows.length;
     this.bassSlant = bass.def.rowSlant;
     const bassLevels = bass.columns + this.bassSlant * (this.bassRows - 1);
@@ -76,7 +76,7 @@ export class Geometry {
   }
 
   pos(b: KeyButton): { x: number; y: number } {
-    return { x: this.colX(b.row), y: this.rowY(b.y) };
+    return { x: this.colX(b.row), y: this.rowY(this.layout.pitchY(b.note)) };
   }
 
   bassColX(rowIndex: number): number {
