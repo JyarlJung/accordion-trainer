@@ -39,7 +39,7 @@ const ui = {
   lastCh: $('lastCh'),
   helpers: $<HTMLInputElement>('helpers'),
   mirror: $<HTMLInputElement>('mirror'),
-  stats: $('stats'),
+  mirrorX: $<HTMLInputElement>('mirrorX'),
 };
 
 const layout = new Layout(layoutJson as LayoutDef);
@@ -348,6 +348,7 @@ function frame(now: number): void {
     pressure: midi.expression,
     showHelpers: ui.helpers.checked,
     mirror: ui.mirror.checked,
+    mirrorX: ui.mirrorX.checked,
   });
 
   if (document.activeElement !== ui.seek && transport.duration > 0) {
@@ -355,7 +356,6 @@ function frame(now: number): void {
   }
   ui.time.textContent = `${fmt(t)} / ${fmt(transport.duration)}${transport.waiting ? ' · 대기 중' : ''}`;
   ui.lastCh.textContent = midi.lastChannel ? `최근 입력 ch${midi.lastChannel}` : '';
-  ui.stats.textContent = notes.length ? `맞음 ${judge.hit} · 놓침 ${judge.miss} · 틀림 ${judge.wrong}` : '';
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

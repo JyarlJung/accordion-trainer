@@ -17,7 +17,7 @@ export function drawBass(ctx: CanvasRenderingContext2D, geo: Geometry, layout: B
   for (const b of layout.buttons) {
     const { x, y } = geo.bassPos(b);
     const single = b.row === 'bass' || b.row === 'counter';
-    drawButton(ctx, x, y, geo.radius * (single ? 1 : 0.86), b.label, {
+    drawButton(ctx, x, y, geo.bassRadius * (single ? 1 : 0.86), b.label, {
       base: b.row === 'bass' ? '#ebe7de' : b.row === 'counter' ? '#cfc9bb' : '#3a3a44',
       text: single ? '#222' : '#d8d8d8',
       landmark: b.marker,

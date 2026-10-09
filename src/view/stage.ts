@@ -13,7 +13,8 @@ export interface ViewState extends RollState {
   chordHeld: ReadonlyMap<number, number>;
   pressure: number; // bellows, 0..1
   showHelpers: boolean;
-  mirror: boolean;
+  mirror: boolean; // flip top-bottom
+  mirrorX: boolean; // flip left-right
 }
 
 const UPCOMING_CHORDS = 3;
@@ -45,9 +46,9 @@ export class Stage {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(h * dpr);
     }
-    const key = `${w}x${h}:${s.mirror}`;
+    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}`;
     if (!this.geo || key !== this.geoKey) {
-      this.geo = new Geometry(this.layout, this.bass, w, h, s.mirror);
+      this.geo = new Geometry(this.layout, this.bass, w, h, s.mirror, s.mirrorX);
       this.geoKey = key;
     }
     const ctx = this.ctx;

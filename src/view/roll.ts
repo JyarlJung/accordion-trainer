@@ -21,12 +21,14 @@ export function drawRoll(ctx: CanvasRenderingContext2D, geo: Geometry, layout: L
   const pps = (y1 - y0) / s.lookahead;
   const toY = (t: number) => y1 - (t - s.time) * pps;
   const lane = geo.pitch / 3;
-  const xa = geo.pitchX(layout.minNote) - lane / 2, xb = geo.pitchX(layout.maxNote) + lane / 2;
+  const lo = geo.pitchX(layout.minNote), hi = geo.pitchX(layout.maxNote);
+  const xa = Math.min(lo, hi) - lane / 2, xb = Math.max(lo, hi) + lane / 2;
+  const toward = Math.sign(geo.pitchX(layout.minNote + 1) - lo); // +1 when low notes are on the left
 
   ctx.fillStyle = 'rgba(255,255,255,0.03)';
   ctx.fillRect(xa, y0, xb - xa, y1 - y0);
 
-  // One lane per semitone, piano-roll style: black-key lanes darker, a line left of each C.
+  // One lane per semitone, piano-roll style: black-key lanes darker, a line on the low side of each C.
   for (let note = layout.minNote; note <= layout.maxNote; note++) {
     const x = geo.pitchX(note);
     if (isBlack(note)) {
@@ -35,7 +37,7 @@ export function drawRoll(ctx: CanvasRenderingContext2D, geo: Geometry, layout: L
     }
     if (note % 12 === 0) {
       ctx.fillStyle = 'rgba(201,162,39,0.4)';
-      ctx.fillRect(x - lane / 2, y0, 1, y1 - y0);
+      ctx.fillRect(x - (toward * lane) / 2, y0, 1, y1 - y0);
     }
   }
 
