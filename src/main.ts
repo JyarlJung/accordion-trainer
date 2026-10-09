@@ -4,7 +4,6 @@ import bassJson from '../layouts/fr4xb-stradella-2row.json';
 import { BassLayout, type BassLayoutDef } from './core/bassLayout';
 import { Layout, noteName, type LayoutDef } from './core/layout';
 import { extractNotes, guessOptions, lowerBound, parseSong, type ExtractOptions, type Song, type SongNote } from './core/song';
-import { demoSong } from './core/demo';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { MidiIO } from './io/midi';
@@ -15,12 +14,14 @@ import { Stage } from './view/stage';
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const ui = {
   file: $<HTMLInputElement>('file'),
-  demo: $<HTMLButtonElement>('demo'),
   songName: $('songName'),
   tracks: $('tracks'),
   split: $<HTMLSelectElement>('split'),
   topLine: $<HTMLInputElement>('topLine'),
   fit: $<HTMLInputElement>('fit'),
+  transpose: $<HTMLSelectElement>('transpose'),
+  channelsBtn: $<HTMLButtonElement>('channelsBtn'),
+  channels: $('channels'),
   play: $<HTMLButtonElement>('play'),
   seek: $<HTMLInputElement>('seek'),
   time: $('time'),
@@ -72,9 +73,11 @@ const RANGE_MIN = 30; // never zoom in to less than two and a half octaves
 // Treble range to show when "song range only" is on: the song's notes plus a margin,
 // widened to RANGE_MIN and kept inside the keyboard.
 function rangeFor(list: SongNote[]): { lo: number; hi: number } | null {
-  if (list.length === 0) return null;
-  let lo = Math.min(...list.map(n => n.note)) - RANGE_MARGIN;
-  let hi = Math.max(...list.map(n => n.note)) + RANGE_MARGIN;
+  // Notes the keyboard can't play (possible with range fitting off) aren't shown, so ignore them.
+  const playable = list.filter(n => layout.primary(n.note)).map(n => n.note);
+  if (playable.length === 0) return null;
+  let lo = Math.min(...playable) - RANGE_MARGIN;
+  let hi = Math.max(...playable) + RANGE_MARGIN;
   const grow = Math.max(0, RANGE_MIN - (hi - lo));
   lo -= Math.floor(grow / 2);
   hi += Math.ceil(grow / 2);
@@ -93,6 +96,7 @@ function setSong(s: Song): void {
   ui.split.value = options.splitNote === null ? '' : String(options.splitNote);
   ui.topLine.checked = options.topLineOnly;
   ui.fit.checked = options.fitToRange;
+  ui.transpose.value = String(options.transpose);
   transport.pause();
   clearLoop();
   renderTracks();
@@ -160,6 +164,17 @@ ui.topLine.onchange = () => {
   options.topLineOnly = ui.topLine.checked;
   rebuild();
 };
+for (let t = -12; t <= 12; t++) ui.transpose.append(new Option(t > 0 ? `+${t}` : String(t), String(t)));
+ui.transpose.value = '0';
+ui.transpose.onchange = () => {
+  if (!options) return;
+  options.transpose = Number(ui.transpose.value);
+  rebuild();
+};
+ui.channelsBtn.onclick = () => {
+  ui.channels.hidden = !ui.channels.hidden;
+  ui.channelsBtn.classList.toggle('active', !ui.channels.hidden);
+};
 ui.fit.onchange = () => {
   if (!options) return;
   options.fitToRange = ui.fit.checked;
@@ -171,7 +186,6 @@ ui.file.onchange = () => {
   if (f) loadFile(f);
   ui.file.value = '';
 };
-ui.demo.onclick = () => setSong(demoSong());
 
 window.addEventListener('dragover', e => {
   e.preventDefault();

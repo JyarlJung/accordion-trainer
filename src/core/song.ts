@@ -35,6 +35,7 @@ export interface ExtractOptions {
   splitNote: number | null; // keep notes >= splitNote
   topLineOnly: boolean;
   fitToRange: boolean;
+  transpose: number; // semitones, applied before fitting to the range
 }
 
 // Notes starting within this window are treated as one chord.
@@ -70,7 +71,7 @@ export function parseSong(data: ArrayBuffer, name: string): Song {
 const RIGHT_HAND_NAME = /right|\br\.?h\b|treble|melody|오른/i;
 
 export function guessOptions(song: Song): ExtractOptions {
-  const base = { topLineOnly: false, fitToRange: true };
+  const base = { topLineOnly: false, fitToRange: true, transpose: 0 };
   if (song.tracks.length === 0) return { ...base, tracks: [], splitNote: null };
   // One track usually means both hands are merged; split at middle C.
   if (song.tracks.length === 1) return { ...base, tracks: [song.tracks[0].index], splitNote: 60 };
@@ -100,7 +101,7 @@ export function extractNotes(song: Song, opts: ExtractOptions, range: { min: num
   const result: SongNote[] = [];
   const seen = new Set<string>();
   for (const n of picked) {
-    let note = n.note;
+    let note = n.note + opts.transpose;
     if (opts.fitToRange) {
       while (note < range.min) note += 12;
       while (note > range.max) note -= 12;

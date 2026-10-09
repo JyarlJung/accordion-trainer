@@ -36,6 +36,7 @@ body.collapsed header { display: none; }
 }
 .sep { width: 1px; height: 18px; background: var(--line); }
 .group { display: inline-flex; align-items: center; gap: 4px; }
+.group[hidden] { display: none; }
 
 #collapse {
   position: fixed;

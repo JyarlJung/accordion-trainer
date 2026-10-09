@@ -9,12 +9,12 @@
     <header id="toolbar">
       <div class="bar">
         <label class="btn">MIDI 열기<input type="file" id="file" accept=".mid,.midi" hidden /></label>
-        <button id="demo">데모</button>
         <span id="songName"></span>
         <span id="tracks" class="tracks"></span>
         <label>분할 <select id="split"></select></label>
         <label><input type="checkbox" id="topLine" /> 최고음만</label>
         <label><input type="checkbox" id="fit" checked /> 음역 맞춤</label>
+        <label>조옮김 <select id="transpose"></select></label>
         <span class="sep"></span>
         <button id="play" class="primary" title="Space">▶</button>
         <input type="range" id="seek" min="0" max="1000" value="0" />
@@ -38,10 +38,13 @@
         <span id="volumeLabel" class="mono">80%</span>
         <span class="sep"></span>
         <label>입력 <select id="midiIn"></select></label>
-        <label>오른손 <select id="chRight"></select></label>
-        <label>베이스 <select id="chBass"></select></label>
-        <label>코드 <select id="chChord"></select></label>
-        <span id="lastCh" class="muted"></span>
+        <button id="channelsBtn" title="악기 MIDI 채널 설정">⚙ 채널</button>
+        <span id="channels" class="group" hidden>
+          <label>오른손 <select id="chRight"></select></label>
+          <label>베이스 <select id="chBass"></select></label>
+          <label>코드 <select id="chChord"></select></label>
+          <span id="lastCh" class="muted"></span>
+        </span>
         <span class="sep"></span>
         <label><input type="checkbox" id="helpers" checked /> 4·5열</label>
         <label><input type="checkbox" id="mirror" /> 위아래 반전</label>
