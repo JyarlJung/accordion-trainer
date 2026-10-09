@@ -236,20 +236,20 @@ ui.rowGap.oninput = () => {
   ui.rowGapLabel.textContent = Number(ui.rowGap.value).toFixed(2);
 };
 
-// Sidebar collapse, remembered across launches.
+// Toolbar collapse, remembered across launches.
 const collapseBtn = $<HTMLButtonElement>('collapse');
 function setCollapsed(collapsed: boolean): void {
   document.body.classList.toggle('collapsed', collapsed);
-  collapseBtn.textContent = collapsed ? '▶' : '◀';
+  collapseBtn.textContent = collapsed ? '▼' : '▲';
   try {
-    localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+    localStorage.setItem('toolbarCollapsed', collapsed ? '1' : '0');
   } catch {
     // Storage may be unavailable; the toggle still works for this session.
   }
 }
 collapseBtn.onclick = () => setCollapsed(!document.body.classList.contains('collapsed'));
 try {
-  setCollapsed(localStorage.getItem('sidebarCollapsed') === '1');
+  setCollapsed(localStorage.getItem('toolbarCollapsed') === '1');
 } catch {
   setCollapsed(false);
 }
