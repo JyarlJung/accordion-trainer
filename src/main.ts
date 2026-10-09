@@ -245,6 +245,17 @@ function clearLoop(): void {
 
 ui.play.onclick = togglePlay;
 ui.seek.oninput = () => seek((Number(ui.seek.value) / 1000) * transport.duration, true);
+// The frame loop moves the seek bar except while the user is dragging it. (Checking focus
+// instead left the bar frozen after any click, since a clicked range input keeps focus.)
+let draggingSeek = false;
+ui.seek.addEventListener('pointerdown', () => {
+  draggingSeek = true;
+});
+window.addEventListener('pointerup', () => {
+  if (!draggingSeek) return;
+  draggingSeek = false;
+  ui.seek.blur(); // hand Space and the arrow keys back to the app's shortcuts
+});
 ui.rate.oninput = () => {
   transport.rate = Number(ui.rate.value);
   ui.rateLabel.textContent = `${Math.round(transport.rate * 100)}%`;
@@ -322,8 +333,10 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     togglePlay();
   } else if (e.code === 'ArrowLeft') {
+    e.preventDefault(); // a focused range input would also move itself
     seek(transport.time - 2);
   } else if (e.code === 'ArrowRight') {
+    e.preventDefault();
     seek(transport.time + 2);
   } else if (e.code === 'Home') {
     seek(loop?.a ?? 0, true);
@@ -509,7 +522,7 @@ function frame(now: number): void {
 
   drawStage();
 
-  if (document.activeElement !== ui.seek && transport.duration > 0) {
+  if (!draggingSeek && transport.duration > 0) {
     ui.seek.value = String(Math.round((t / transport.duration) * 1000));
   }
   ui.time.textContent = `${fmt(t)} / ${fmt(transport.duration)}${transport.waiting ? ' · 대기 중' : ''}`;
