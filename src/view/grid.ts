@@ -82,20 +82,12 @@ export function drawGrid(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Row numbers on top, edge/bellows labels at the bottom.
+  // Row numbers to the left of each row.
   ctx.font = `600 ${Math.max(11, r * 0.6)}px system-ui, sans-serif`;
   for (const row of layout.rows) {
     ctx.fillStyle = ROW_COLORS[row.row] ?? '#888';
-    ctx.fillText(String(row.row), geo.colX(row.row), geo.rhTop - 14);
+    ctx.fillText(String(row.row), geo.labelX, geo.rowLineY(row.row));
   }
-  ctx.font = '12px system-ui, sans-serif';
-  ctx.fillStyle = '#9a9aa5';
-  const edgeLeft = geo.order[0] === layout.rows[0].row;
-  ctx.textAlign = 'left';
-  ctx.fillText(edgeLeft ? '◀ 가장자리' : '◀ 주름상자', geo.gridX0, geo.bottom + 16);
-  ctx.textAlign = 'right';
-  ctx.fillText(edgeLeft ? '주름상자 ▶' : '가장자리 ▶', geo.gridX0 + geo.gridW, geo.bottom + 34);
-  ctx.textAlign = 'center';
 
   for (const b of layout.buttons) {
     const { x, y } = geo.pos(b);

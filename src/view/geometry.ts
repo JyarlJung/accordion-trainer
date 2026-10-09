@@ -2,90 +2,103 @@ import type { BassButton, BassLayout } from '../core/bassLayout';
 import type { KeyButton, Layout } from '../core/layout';
 
 const PAD = 16;
-const HEAD = 30;
-const FOOT = 30;
+const LABEL = 30; // row labels left of each board
+const ROLL_MIN = 0.25; // share of the height kept for the falling notes
+const ROW_GAP = 0.9; // distance between rows of a board, in button pitches
+const BOARD_GAP = 0.5; // space around the bellows meter
+const METER = 0.45;
+const MAX_PITCH = 90;
 
-// Screen placement, left to right: bass panel, bellows meter, treble grid, note roll.
-// Like the opened-up instrument, both boards face the bellows in the middle by default.
-// Both boards share one button pitch; the roll shares the treble grid's vertical axis.
+// Top to bottom: falling notes, treble board, bellows meter, bass board. This is the
+// opened-up instrument turned on its side: both boards face the bellows in the middle.
+// The horizontal axis is pitch on the treble board (low notes left), so each note falls
+// straight onto its button.
 export class Geometry {
-  readonly pitch: number; // vertical distance between buttons in a row
+  readonly pitch: number; // distance between neighbouring buttons in a row
   readonly radius: number;
-  readonly colGap: number;
-  readonly top: number;
-  readonly bottom: number;
+  readonly rowGap: number;
+  readonly left: number; // left edge of the boards (after the row labels)
+  readonly right: number;
+  readonly labelX: number;
+  readonly rollTop: number;
+  readonly rollBottom: number;
+  readonly rhX0: number; // centre x of the lowest treble pitch
+  readonly rhRowsTop: number;
+  readonly meterY: number;
+  readonly meterH: number;
   readonly bassX0: number;
-  readonly bassW: number;
-  readonly meterX0: number;
-  readonly meterW: number;
-  readonly gridX0: number;
-  readonly gridW: number;
-  readonly rhTop: number;
-  readonly rhBottom: number;
-  readonly rollX0: number;
-  readonly rollX1: number;
-  readonly order: number[]; // treble row numbers from left to right
-  readonly bassOrder: number[]; // bass row indices from left to right
-  private readonly colOf = new Map<number, number>();
-  private readonly bassColOf = new Map<number, number>();
-  private readonly bassSlant: number;
+  readonly bassRowsTop: number;
+  readonly rhOrder: number[]; // treble row numbers from top to bottom
+  readonly bassOrder: number[]; // bass row indices from top to bottom
+  private readonly rhLine = new Map<number, number>();
+  private readonly bassLine = new Map<number, number>();
   private readonly bassRows: number;
+  private readonly bassSlant: number;
 
-  constructor(private readonly layout: Layout, bass: BassLayout, readonly width: number, readonly height: number, mirror: boolean) {
-    const rhLevels = layout.pitchY(layout.maxNote) + 1;
+  constructor(
+    private readonly layout: Layout, bass: BassLayout,
+    readonly width: number, readonly height: number, flip: boolean,
+  ) {
     this.bassRows = bass.def.rows.length;
     this.bassSlant = bass.def.rowSlant;
-    const bassLevels = bass.columns + this.bassSlant * (this.bassRows - 1);
-    const levels = Math.max(rhLevels, bassLevels);
+    const rhSpan = layout.pitchY(layout.maxNote) + 1;
+    const bassSpan = bass.columns + this.bassSlant * (this.bassRows - 1);
+    const boardUnits = (rows: number) => (rows - 1) * ROW_GAP + 0.92;
+    const stackUnits = boardUnits(layout.rows.length) + BOARD_GAP + METER + BOARD_GAP + boardUnits(this.bassRows);
 
-    this.top = PAD + HEAD;
-    this.pitch = Math.max(8, (height - this.top - FOOT - PAD) / levels);
-    this.bottom = this.top + levels * this.pitch;
-    this.rhTop = this.top + ((levels - rhLevels) * this.pitch) / 2;
-    this.rhBottom = this.rhTop + rhLevels * this.pitch;
-    this.radius = this.pitch * 0.46;
-    this.colGap = this.pitch * 0.9;
+    this.left = PAD + LABEL;
+    this.right = width - PAD;
+    this.labelX = PAD + LABEL / 2;
+    const byWidth = (this.right - this.left) / Math.max(rhSpan, bassSpan);
+    const byHeight = ((height - 2 * PAD) * (1 - ROLL_MIN)) / stackUnits;
+    this.pitch = Math.max(8, Math.min(byWidth, byHeight, MAX_PITCH));
+    const p = this.pitch;
+    this.radius = p * 0.46;
+    this.rowGap = p * ROW_GAP;
 
-    // Default: bass rows ordered outer -> bellows, treble rows bellows -> edge.
-    this.bassOrder = bass.def.rows.map((_, i) => i).reverse();
-    this.order = layout.rows.map(r => r.row).reverse();
-    if (mirror) {
+    // Stack from the bottom up; the roll takes whatever is left on top.
+    const boardH = (rows: number) => (rows - 1) * this.rowGap + this.radius * 2;
+    this.bassRowsTop = height - PAD - boardH(this.bassRows);
+    this.meterH = p * METER;
+    this.meterY = this.bassRowsTop - p * BOARD_GAP - this.meterH;
+    this.rhRowsTop = this.meterY - p * BOARD_GAP - boardH(layout.rows.length);
+    this.rollTop = PAD;
+    this.rollBottom = this.rhRowsTop - p * 0.2;
+
+    const centre = (span: number) => this.left + (this.right - this.left - span * p) / 2 + p / 2;
+    this.rhX0 = centre(rhSpan);
+    this.bassX0 = centre(bassSpan);
+
+    // Default: treble row 1 on top (next to the roll), counter-bass on top (next to the bellows).
+    this.rhOrder = layout.rows.map(r => r.row);
+    this.bassOrder = bass.def.rows.map((_, i) => i);
+    if (flip) {
+      this.rhOrder.reverse();
       this.bassOrder.reverse();
-      this.order.reverse();
     }
-    this.bassOrder.forEach((r, i) => this.bassColOf.set(r, i));
-    this.order.forEach((row, i) => this.colOf.set(row, i));
-
-    const gap = this.pitch * 0.5;
-    this.bassX0 = PAD;
-    this.bassW = this.colGap * (this.bassRows - 1) + this.radius * 2;
-    this.meterX0 = this.bassX0 + this.bassW + gap;
-    this.meterW = this.pitch * 0.45;
-    this.gridX0 = this.meterX0 + this.meterW + gap;
-    this.gridW = this.colGap * (this.order.length - 1) + this.radius * 2;
-    this.rollX0 = this.gridX0 + this.gridW + this.pitch * 0.6;
-    this.rollX1 = width - PAD;
+    this.rhOrder.forEach((row, i) => this.rhLine.set(row, this.rhRowsTop + this.radius + i * this.rowGap));
+    this.bassOrder.forEach((r, i) => this.bassLine.set(r, this.bassRowsTop + this.radius + i * this.rowGap));
   }
 
-  colX(row: number): number {
-    return this.gridX0 + this.radius + (this.colOf.get(row) ?? 0) * this.colGap;
+  pitchX(note: number): number {
+    return this.rhX0 + this.layout.pitchY(note) * this.pitch;
   }
 
-  rowY(y: number): number {
-    return this.rhTop + this.pitch / 2 + y * this.pitch;
+  rowLineY(row: number): number {
+    return this.rhLine.get(row) ?? 0;
+  }
+
+  bassLineY(rowIndex: number): number {
+    return this.bassLine.get(rowIndex) ?? 0;
   }
 
   pos(b: KeyButton): { x: number; y: number } {
-    return { x: this.colX(b.row), y: this.rowY(this.layout.pitchY(b.note)) };
-  }
-
-  bassColX(rowIndex: number): number {
-    return this.bassX0 + this.radius + (this.bassColOf.get(rowIndex) ?? 0) * this.colGap;
+    return { x: this.pitchX(b.note), y: this.rowLineY(b.row) };
   }
 
   bassPos(b: BassButton): { x: number; y: number } {
-    // Rows further from the bellows sit higher, following the board's slant.
-    const y = b.col + (this.bassRows - 1 - b.rowIndex) * this.bassSlant;
-    return { x: this.bassColX(b.rowIndex), y: this.top + this.pitch / 2 + y * this.pitch };
+    // Rows further from the bellows are shifted along the board, following its slant.
+    const x = this.bassX0 + (b.col + (this.bassRows - 1 - b.rowIndex) * this.bassSlant) * this.pitch;
+    return { x, y: this.bassLineY(b.rowIndex) };
   }
 }

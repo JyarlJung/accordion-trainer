@@ -204,6 +204,24 @@ ui.loopB.onclick = () => {
 };
 ui.loopClear.onclick = clearLoop;
 
+// Sidebar collapse, remembered across launches.
+const collapseBtn = $<HTMLButtonElement>('collapse');
+function setCollapsed(collapsed: boolean): void {
+  document.body.classList.toggle('collapsed', collapsed);
+  collapseBtn.textContent = collapsed ? '▶' : '◀';
+  try {
+    localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+  } catch {
+    // Storage may be unavailable; the toggle still works for this session.
+  }
+}
+collapseBtn.onclick = () => setCollapsed(!document.body.classList.contains('collapsed'));
+try {
+  setCollapsed(localStorage.getItem('sidebarCollapsed') === '1');
+} catch {
+  setCollapsed(false);
+}
+
 // Background tabs stop requestAnimationFrame, so note-offs would never fire.
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && transport.playing) togglePlay();

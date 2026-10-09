@@ -12,7 +12,7 @@ export function drawBass(ctx: CanvasRenderingContext2D, geo: Geometry, layout: B
 
   ctx.font = `600 ${Math.max(10, geo.radius * 0.5)}px system-ui, sans-serif`;
   ctx.fillStyle = '#9a9aa5';
-  layout.def.rows.forEach((row, i) => ctx.fillText(ROW_TITLES[row], geo.bassColX(i), geo.top - 14));
+  layout.def.rows.forEach((row, i) => ctx.fillText(ROW_TITLES[row], geo.labelX, geo.bassLineY(i)));
 
   for (const b of layout.buttons) {
     const { x, y } = geo.bassPos(b);
@@ -25,24 +25,23 @@ export function drawBass(ctx: CanvasRenderingContext2D, geo: Geometry, layout: B
   }
 }
 
-// Bellows pressure (CC11) drawn in the gap between the two boards.
+// Bellows pressure (CC11) drawn as a bar in the gap between the two boards.
 export function drawBellows(ctx: CanvasRenderingContext2D, geo: Geometry, pressure: number): void {
-  const x = geo.meterX0, w = geo.meterW, top = geo.top, h = geo.bottom - geo.top;
+  const x = geo.left, w = geo.right - geo.left, y = geo.meterY, h = geo.meterH;
   ctx.fillStyle = 'rgba(255,255,255,0.05)';
   ctx.beginPath();
-  ctx.roundRect(x, top, w, h, w / 2);
+  ctx.roundRect(x, y, w, h, h / 2);
   ctx.fill();
-  const fill = h * Math.min(1, Math.max(0, pressure));
+  const fill = w * Math.min(1, Math.max(0, pressure));
   if (fill > 0) {
     ctx.fillStyle = `hsl(${40 - pressure * 40}, 85%, 55%)`;
     ctx.beginPath();
-    ctx.roundRect(x, top + h - fill, w, fill, w / 2);
+    ctx.roundRect(x, y, fill, h, h / 2);
     ctx.fill();
   }
-  ctx.save();
-  ctx.translate(x + w / 2, top - 14);
   ctx.fillStyle = '#9a9aa5';
   ctx.font = '11px system-ui, sans-serif';
-  ctx.fillText('압력', 0, 0);
-  ctx.restore();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('압력', geo.labelX, y + h / 2);
 }
