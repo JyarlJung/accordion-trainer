@@ -3,13 +3,18 @@ export interface MidiPort {
   name: string;
 }
 
-// Web MIDI wrapper: one selected input (with optional channel filter) and one output.
+export type Part = 'right' | 'bass' | 'chord';
+export const PARTS: Part[] = ['right', 'bass', 'chord'];
+
+// Web MIDI wrapper: one selected input split by channel into parts, and one output.
 export class MidiIO {
-  channel: number | null = null; // 1..16, null = all channels
+  // FR-4xb defaults: treble on 1, bass on 2, chord on 3.
+  readonly channels: Record<Part, number> = { right: 1, bass: 2, chord: 3 };
+  readonly held: Record<Part, Map<number, number>> = { right: new Map(), bass: new Map(), chord: new Map() }; // note -> velocity
+  expression = 0; // last CC11 (bellows pressure on the FR-4xb), 0..1
   lastChannel: number | null = null;
-  readonly held = new Map<number, number>(); // note -> velocity (0..1)
-  onNoteOn?: (note: number, velocity: number) => void;
-  onNoteOff?: (note: number) => void;
+  onNoteOn?: (part: Part, note: number, velocity: number) => void;
+  onNoteOff?: (part: Part, note: number) => void;
   onPortsChanged?: () => void;
 
   private access: MIDIAccess | null = null;
@@ -64,9 +69,11 @@ export class MidiIO {
   }
 
   private releaseAll(): void {
-    for (const note of [...this.held.keys()]) {
-      this.held.delete(note);
-      this.onNoteOff?.(note);
+    for (const part of PARTS) {
+      for (const note of [...this.held[part].keys()]) {
+        this.held[part].delete(note);
+        this.onNoteOff?.(part, note);
+      }
     }
   }
 
@@ -74,15 +81,20 @@ export class MidiIO {
     if (!data || data.length < 3) return;
     const type = data[0] & 0xf0;
     const channel = (data[0] & 0x0f) + 1;
+    const [, d1, d2] = data;
+    if (type === 0xb0 && d1 === 11) {
+      this.expression = d2 / 127;
+      return;
+    }
     if (type !== 0x80 && type !== 0x90) return;
     this.lastChannel = channel;
-    if (this.channel !== null && channel !== this.channel) return;
-    const [, note, velocity] = data;
-    if (type === 0x90 && velocity > 0) {
-      this.held.set(note, velocity / 127);
-      this.onNoteOn?.(note, velocity / 127);
-    } else if (this.held.delete(note)) {
-      this.onNoteOff?.(note);
+    const part = PARTS.find(p => this.channels[p] === channel);
+    if (!part) return;
+    if (type === 0x90 && d2 > 0) {
+      this.held[part].set(d1, d2 / 127);
+      this.onNoteOn?.(part, d1, d2 / 127);
+    } else if (this.held[part].delete(d1)) {
+      this.onNoteOff?.(part, d1);
     }
   }
 }

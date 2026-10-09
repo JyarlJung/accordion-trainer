@@ -20,7 +20,7 @@ export function drawRoll(ctx: CanvasRenderingContext2D, geo: Geometry, layout: L
   const toX = (t: number) => x0 + (t - s.time) * pps;
 
   ctx.fillStyle = 'rgba(255,255,255,0.03)';
-  ctx.fillRect(x0, geo.top, x1 - x0, geo.bottom - geo.top);
+  ctx.fillRect(x0, geo.rhTop, x1 - x0, geo.rhBottom - geo.rhTop);
 
   // One guide line per button height.
   const levels = [...new Set(layout.buttons.map(b => b.y))];
@@ -37,7 +37,7 @@ export function drawRoll(ctx: CanvasRenderingContext2D, geo: Geometry, layout: L
     const la = Math.max(x0, toX(s.loop.a)), lb = Math.min(x1, toX(s.loop.b));
     if (lb > la) {
       ctx.fillStyle = 'rgba(255,213,79,0.07)';
-      ctx.fillRect(la, geo.top, lb - la, geo.bottom - geo.top);
+      ctx.fillRect(la, geo.rhTop, lb - la, geo.rhBottom - geo.rhTop);
     }
   }
 
@@ -69,7 +69,7 @@ export function drawRoll(ctx: CanvasRenderingContext2D, geo: Geometry, layout: L
   ctx.strokeStyle = 'rgba(255,255,255,0.7)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(x0, geo.top - 4);
-  ctx.lineTo(x0, geo.bottom + 4);
+  ctx.moveTo(x0, geo.rhTop - 4);
+  ctx.lineTo(x0, geo.rhBottom + 4);
   ctx.stroke();
 }

@@ -1,0 +1,7 @@
+{
+  "name": "Roland FR-4xb / 2 Bass Rows (Stradella 120)",
+  "columnsTopToBottom": ["F", "Bb", "Eb", "Ab", "C#", "F#", "B", "E", "A", "D", "G", "C", "F", "Bb", "Eb", "Ab", "C#", "F#", "B", "E"],
+  "rows": ["counter", "bass", "major", "minor", "seventh", "dim"],
+  "markerColumns": [7, 11, 15],
+  "rowSlant": 0.37
+}

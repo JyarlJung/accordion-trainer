@@ -1,5 +1,7 @@
 import './style.css';
 import layoutJson from '../layouts/fr4xb-c-griff-europe.json';
+import bassJson from '../layouts/fr4xb-stradella-2row.json';
+import { BassLayout, type BassLayoutDef } from './core/bassLayout';
 import { Layout, noteName, type LayoutDef } from './core/layout';
 import { extractNotes, guessOptions, lowerBound, parseSong, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { demoSong } from './core/demo';
@@ -31,7 +33,9 @@ const ui = {
   sound: $<HTMLInputElement>('sound'),
   output: $<HTMLSelectElement>('output'),
   midiIn: $<HTMLSelectElement>('midiIn'),
-  midiCh: $<HTMLSelectElement>('midiCh'),
+  chRight: $<HTMLSelectElement>('chRight'),
+  chBass: $<HTMLSelectElement>('chBass'),
+  chChord: $<HTMLSelectElement>('chChord'),
   lastCh: $('lastCh'),
   helpers: $<HTMLInputElement>('helpers'),
   mirror: $<HTMLInputElement>('mirror'),
@@ -44,7 +48,8 @@ const midi = new MidiIO();
 const synth = new SynthSink();
 const sampler = new SamplerSink();
 let sink: NoteSink = sampler;
-const stage = new Stage($<HTMLCanvasElement>('stage'), layout);
+const bassLayout = new BassLayout(bassJson as BassLayoutDef);
+const stage = new Stage($<HTMLCanvasElement>('stage'), layout, bassLayout);
 
 let song: Song | null = null;
 let options: ExtractOptions | null = null;
@@ -220,11 +225,13 @@ window.addEventListener('keydown', e => {
 
 // ---------- MIDI devices ----------
 
-ui.midiCh.append(new Option('전체', ''));
-for (let c = 1; c <= 16; c++) ui.midiCh.append(new Option(String(c), String(c)));
-ui.midiCh.onchange = () => {
-  midi.channel = ui.midiCh.value === '' ? null : Number(ui.midiCh.value);
-};
+for (const [part, select] of [['right', ui.chRight], ['bass', ui.chBass], ['chord', ui.chChord]] as const) {
+  for (let c = 1; c <= 16; c++) select.append(new Option(String(c), String(c)));
+  select.value = String(midi.channels[part]);
+  select.onchange = () => {
+    midi.channels[part] = Number(select.value);
+  };
+}
 
 function refreshPorts(): void {
   const inputs = midi.inputs();
@@ -255,7 +262,7 @@ function selectVoice(value: string): void {
     sink = synth;
   } else if (value.startsWith('midi:')) {
     midi.selectOutput(value.slice(5));
-    sink = new MidiOutSink(midi, midi.channel ?? 1);
+    sink = new MidiOutSink(midi, midi.channels.right);
   } else {
     const set = sampleSets.find(s => `set:${s.id}` === value)!;
     sink = sampler;
@@ -266,7 +273,9 @@ function selectVoice(value: string): void {
 ui.midiIn.onchange = () => midi.selectInput(ui.midiIn.value || null);
 ui.output.onchange = () => selectVoice(ui.output.value);
 
-midi.onNoteOn = note => stage.flash(note, judge.onNoteOn(note, transport.time, transport.rate));
+midi.onNoteOn = (part, note) => {
+  if (part === 'right') stage.flash(note, judge.onNoteOn(note, transport.time, transport.rate));
+};
 midi.onPortsChanged = refreshPorts;
 refreshPorts();
 selectVoice(ui.output.value);
@@ -314,7 +323,10 @@ function frame(now: number): void {
     judge,
     lookahead: 4,
     loop,
-    held: midi.held,
+    held: midi.held.right,
+    bassHeld: midi.held.bass,
+    chordHeld: midi.held.chord,
+    pressure: midi.expression,
     showHelpers: ui.helpers.checked,
     mirror: ui.mirror.checked,
   });
@@ -333,8 +345,8 @@ requestAnimationFrame(frame);
 if (import.meta.env.DEV) {
   Object.assign(window, {
     app: {
-      press: (note: number) => midi.simulate(note, true),
-      release: (note: number) => midi.simulate(note, false),
+      press: (note: number, channel = 1) => midi.simulate(note, true, channel),
+      release: (note: number, channel = 1) => midi.simulate(note, false, channel),
       transport,
       judge: () => judge,
     },

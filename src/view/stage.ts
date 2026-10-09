@@ -1,12 +1,17 @@
+import type { BassLayout } from '../core/bassLayout';
 import type { Layout } from '../core/layout';
 import type { HitResult } from '../core/judge';
+import { drawBass, drawBellows } from './bass';
 import { DUPLICATE, EXPECT, HIT, LIVE, MISSED, UPCOMING } from './colors';
 import { Geometry } from './geometry';
 import { drawGrid, type Mark } from './grid';
 import { drawRoll, type RollState } from './roll';
 
 export interface ViewState extends RollState {
-  held: ReadonlyMap<number, number>;
+  held: ReadonlyMap<number, number>; // treble notes held on the instrument
+  bassHeld: ReadonlyMap<number, number>;
+  chordHeld: ReadonlyMap<number, number>;
+  pressure: number; // bellows, 0..1
   showHelpers: boolean;
   mirror: boolean;
 }
@@ -20,7 +25,11 @@ export class Stage {
   private geoKey = '';
   private flashes: { note: number; kind: HitResult; at: number }[] = [];
 
-  constructor(private readonly canvas: HTMLCanvasElement, private readonly layout: Layout) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly layout: Layout,
+    private readonly bass: BassLayout,
+  ) {
     this.ctx = canvas.getContext('2d')!;
   }
 
@@ -37,7 +46,7 @@ export class Stage {
     }
     const key = `${w}x${h}:${s.mirror}`;
     if (!this.geo || key !== this.geoKey) {
-      this.geo = new Geometry(this.layout, w, h, s.mirror);
+      this.geo = new Geometry(this.layout, this.bass, w, h, s.mirror);
       this.geoKey = key;
     }
     const ctx = this.ctx;
@@ -49,6 +58,21 @@ export class Stage {
 
     drawRoll(ctx, this.geo, this.layout, s);
     drawGrid(ctx, this.geo, this.layout, this.buildMarks(s), s.showHelpers);
+    drawBellows(ctx, this.geo, s.pressure);
+    drawBass(ctx, this.geo, this.bass, this.buildBassMarks(s));
+  }
+
+  private buildBassMarks(s: ViewState): Map<string, Mark> {
+    const marks = new Map<string, Mark>();
+    // A bass note can't tell fundamental from counter-bass: fill the likely one, ring the others.
+    for (const note of s.bassHeld.keys()) {
+      const [primary, ...others] = this.bass.forBassNote(note);
+      if (primary) marks.set(primary.id, { fill: LIVE });
+      for (const b of others) if (!marks.has(b.id)) marks.set(b.id, { ring: LIVE });
+    }
+    const chord = this.bass.forChord(s.chordHeld.keys());
+    if (chord) marks.set(chord.id, { fill: LIVE });
+    return marks;
   }
 
   private buildMarks(s: ViewState): Map<string, Mark> {
