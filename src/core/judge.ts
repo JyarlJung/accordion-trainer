@@ -16,6 +16,7 @@ export class Judge {
   miss = 0;
   wrong = 0;
   windowSec = 0.15; // real-time tolerance; scaled by playback rate into song time
+  lastHit: number | null = null; // id of the note matched by the latest 'hit'
   private missPtr = 0;
   private chordPtr = 0;
 
@@ -55,6 +56,7 @@ export class Judge {
     }
     this.state[best] = 'hit';
     this.hit++;
+    this.lastHit = best;
     return 'hit';
   }
 

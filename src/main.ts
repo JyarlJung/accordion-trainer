@@ -208,12 +208,17 @@ function togglePlay(): void {
     transport.pause();
     silence();
   } else {
-    if (sink === synth) void synth.start();
-    if (sink === sampler) void sampler.start();
+    startSound();
     if (transport.time >= transport.duration) seek(loop?.a ?? 0);
     transport.play();
   }
   ui.play.textContent = transport.playing ? '❚❚' : '▶';
+}
+
+// Audio needs a user gesture to start; play and key presses both count.
+function startSound(): void {
+  if (sink === synth) void synth.start();
+  if (sink === sampler) void sampler.start();
 }
 
 function clearLoop(): void {
@@ -358,7 +363,16 @@ for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRa
 }
 
 midi.onNoteOn = (part, note) => {
-  if (part === 'right') stage.flash(note, judge.onNoteOn(note, transport.time, transport.rate));
+  if (part !== 'right') return;
+  const result = judge.onNoteOn(note, transport.time, transport.rate);
+  stage.flash(note, result);
+  // Wait mode stays quiet until a note is played right, then sounds it for its written length.
+  if (result === 'hit' && ui.mode.value === 'wait' && ui.sound.checked && judge.lastHit !== null) {
+    const n = notes[judge.lastHit];
+    startSound();
+    sink.noteOn(n.note, n.velocity);
+    sounding.set(n.id, n);
+  }
 };
 midi.onPortsChanged = refreshPorts;
 refreshPorts();
@@ -392,7 +406,8 @@ function frame(now: number): void {
     sounding.delete(id);
     if (![...sounding.values()].some(o => o.note === n.note)) sink.noteOff(n.note);
   }
-  const sound = ui.sound.checked && transport.playing;
+  // In wait mode notes sound when they're played right (see midi.onNoteOn), not on arrival.
+  const sound = ui.sound.checked && transport.playing && !waitMode;
   while (nextIdx < notes.length && notes[nextIdx].time <= t) {
     const n = notes[nextIdx++];
     if (sound) {
@@ -436,6 +451,7 @@ if (import.meta.env.DEV) {
       release: (note: number, channel = 1) => midi.simulate(note, false, channel),
       transport,
       judge: () => judge,
+      sounding: () => [...sounding.values()].map(n => n.note),
     },
   });
 }
