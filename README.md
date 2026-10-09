@@ -14,7 +14,7 @@ exe 옆에 `samples/<음색 이름>/` 폴더를 만들고 샘플과 `manifest.js
 { "label": "내 아코디언", "urls": { "A3": "a3.ogg", "A4": "a4.ogg" }, "loop": [0.1, 0.35] }
 ```
 
-`loop`은 길게 누를 때 반복할 구간(샘플 길이 대비 비율)입니다.
+`loop`은 길게 누를 때 반복할 구간(샘플 길이 대비 비율)입니다. `false`로 두면 반복 없이 샘플대로 자연스럽게 사라지고, `"maxHold": 초`를 넣으면 누르고 있어도 그 시간 뒤에 끝납니다.
 
 ## 악기 연결 (FR-4xb)
 USB COMPUTER 단자로 연결하면 입력이 자동으로 잡힙니다. 악기 음색으로 곡을 들으려면 악기의 MIDI → Ext Seq → Acordion을 On으로 두고, 앱 ⚙ 설정에서 음색을 "MIDI: Roland Arranger"로 고르세요.

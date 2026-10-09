@@ -50,7 +50,10 @@ export interface SampleSet {
   label: string;
   baseUrl: string;
   urls: Record<string, string>; // note name ("A4") -> file, relative to baseUrl
-  loop?: [number, number]; // loop region as fractions of the sample length
+  // Loop region as fractions of the sample length, so held notes sustain; false plays the
+  // sample once, letting it fade out the way it was recorded.
+  loop?: [number, number] | false;
+  maxHold?: number; // seconds a held note lasts before fading out on its own
   release?: number;
 }
 
@@ -66,16 +69,18 @@ export const BUILTIN_SETS: SampleSet[] = [{
 
 const RETRIGGER_GAP = 0.025; // seconds
 
+const HOLD_FADE = 0.3; // seconds, fade at the end of maxHold
+
 interface Voice {
   src: Tone.ToneBufferSource;
   gain: Tone.Gain;
+  ended: boolean;
 }
 
 interface Sample {
   root: number; // MIDI note the sample was recorded at
   buffer: Tone.ToneAudioBuffer;
-  loopStart: number; // seconds
-  loopEnd: number;
+  loop: { start: number; end: number } | null; // seconds; null = play once
 }
 
 // Moves a loop point to the next rising zero crossing to avoid a click at the seam.
@@ -86,17 +91,19 @@ function snapToZero(data: Float32Array, i: number): number {
   return i;
 }
 
-function makeSample(root: number, buffer: Tone.ToneAudioBuffer, [ls, le]: [number, number]): Sample {
+function makeSample(root: number, buffer: Tone.ToneAudioBuffer, loop: [number, number] | false): Sample {
+  if (!loop) return { root, buffer, loop: null };
   const data = buffer.getChannelData(0);
   const rate = buffer.sampleRate;
+  const [ls, le] = loop;
   return {
     root, buffer,
-    loopStart: snapToZero(data, Math.floor(data.length * ls)) / rate,
-    loopEnd: snapToZero(data, Math.floor(data.length * le)) / rate,
+    loop: { start: snapToZero(data, Math.floor(data.length * ls)) / rate, end: snapToZero(data, Math.floor(data.length * le)) / rate },
   };
 }
 
-// Sample player that loops the middle of each sample, so held notes sustain indefinitely.
+// Sample player. By default it loops the middle of each sample so held notes sustain; a set can
+// instead play samples once (natural decay) and/or cap how long a held note lasts.
 export class SamplerSink implements NoteSink {
   private samples: Sample[] = [];
   private readonly voices = new Map<number, Voice>();
@@ -125,14 +132,29 @@ export class SamplerSink implements NoteSink {
     this.release(note, retrigger || (this.set?.release ?? 0.12));
     this.out ??= new Tone.Gain(0.8).toDestination();
     const s = this.samples.reduce((a, b) => (Math.abs(b.root - note) < Math.abs(a.root - note) ? b : a));
-    const src = new Tone.ToneBufferSource({ url: s.buffer, loop: true, loopStart: s.loopStart, loopEnd: s.loopEnd });
+    const src = new Tone.ToneBufferSource(s.loop
+      ? { url: s.buffer, loop: true, loopStart: s.loop.start, loopEnd: s.loop.end }
+      : { url: s.buffer });
     src.playbackRate.value = 2 ** ((note - s.root) / 12);
     const gain = new Tone.Gain(0).connect(this.out);
     src.connect(gain);
     const start = Tone.now() + retrigger;
     gain.gain.setValueAtTime(0, start).linearRampToValueAtTime(velocity, start + 0.01);
     src.start(start);
-    this.voices.set(note, { src, gain });
+    const voice: Voice = { src, gain, ended: false };
+    // A voice can end by itself (sample played out, or maxHold reached) before its key is released.
+    src.onended = () => {
+      voice.ended = true;
+      if (this.voices.get(note) === voice) this.voices.delete(note);
+      src.dispose();
+      gain.dispose();
+    };
+    const hold = this.set?.maxHold;
+    if (hold) {
+      gain.gain.setValueAtTime(velocity, start + hold).linearRampToValueAtTime(0, start + hold + HOLD_FADE);
+      src.stop(start + hold + HOLD_FADE);
+    }
+    this.voices.set(note, voice);
   }
 
   noteOff(note: number): void {
@@ -143,12 +165,9 @@ export class SamplerSink implements NoteSink {
     const v = this.voices.get(note);
     if (!v) return;
     this.voices.delete(note);
+    if (v.ended) return;
     const now = Tone.now();
     v.gain.gain.cancelScheduledValues(now).setValueAtTime(v.gain.gain.value, now).linearRampToValueAtTime(0, now + rel);
-    v.src.onended = () => {
-      v.src.dispose();
-      v.gain.dispose();
-    };
     v.src.stop(now + rel);
   }
 
