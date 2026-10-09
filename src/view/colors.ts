@@ -1,5 +1,10 @@
-export const ROW_COLORS: Record<number, string> = { 1: '#ff8a65', 2: '#4fc3f7', 3: '#b39ddb' };
-export const HELPER_ONLY = '#ffd54f';
+// One hue, darker from row 1 to row 3, so the rows read as a sequence rather than categories.
+export const ROW_COLORS: Record<number, string> = {
+  1: 'hsl(258, 100%, 82%)',
+  2: 'hsl(258, 70%, 64%)',
+  3: 'hsl(258, 45%, 46%)',
+};
+export const HELPER_ONLY = 'hsl(258, 20%, 36%)'; // notes that exist only on rows 4-5
 
 export const EXPECT = '#e53935'; // press now (main rows)
 export const ONSET = '#ff8a80'; // first moment of a note, so repeats stand out

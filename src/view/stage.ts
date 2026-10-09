@@ -12,6 +12,7 @@ export interface ViewState extends RollState {
   bassHeld: ReadonlyMap<number, number>;
   chordHeld: ReadonlyMap<number, number>;
   pressure: number; // bellows, 0..1
+  showHelpers: boolean; // rows 4-5
   mirror: boolean; // flip top-bottom
   mirrorX: boolean; // flip left-right
   rowGap: number; // treble row spacing, in button pitches
@@ -26,6 +27,8 @@ export class Stage {
   private geo: Geometry | null = null;
   private geoKey = '';
   private flashes: { note: number; kind: HitResult; at: number }[] = [];
+  private rowsFor: unknown = null;
+  private neededRows = new Set<number>();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -46,9 +49,10 @@ export class Stage {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(h * dpr);
     }
-    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}:${s.range?.lo}-${s.range?.hi}`;
+    const rows = this.visibleRows(s);
+    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}:${s.range?.lo}-${s.range?.hi}:${rows}`;
     if (!this.geo || key !== this.geoKey) {
-      this.geo = new Geometry(this.layout, this.bass, w, h, { flipY: s.mirror, flipX: s.mirrorX, rowGap: s.rowGap, range: s.range });
+      this.geo = new Geometry(this.layout, this.bass, w, h, { flipY: s.mirror, flipX: s.mirrorX, rowGap: s.rowGap, range: s.range, rows });
       this.geoKey = key;
     }
     const ctx = this.ctx;
@@ -59,10 +63,21 @@ export class Stage {
     this.flashes = this.flashes.filter(f => now - f.at < FLASH_MS);
 
     drawLanes(ctx, this.geo, this.layout, s);
-    drawGrid(ctx, this.geo, this.layout, this.buildMarks(s), s.showHelpers);
+    drawGrid(ctx, this.geo, this.layout, this.buildMarks(s));
     drawNotes(ctx, this.geo, this.layout, s);
     drawBellows(ctx, this.geo, s.pressure);
     drawBass(ctx, this.geo, this.bass, this.buildBassMarks(s));
+  }
+
+  // Helper rows fold away when hidden, except a row the song needs (a note only it has).
+  private visibleRows(s: ViewState): number[] {
+    if (s.notes !== this.rowsFor) {
+      this.rowsFor = s.notes;
+      this.neededRows = new Set(s.notes.map(n => this.layout.primary(n.note)?.row ?? 0));
+    }
+    return this.layout.rows
+      .filter(r => r.role === 'main' || s.showHelpers || this.neededRows.has(r.row))
+      .map(r => r.row);
   }
 
   private buildBassMarks(s: ViewState): Map<string, Mark> {

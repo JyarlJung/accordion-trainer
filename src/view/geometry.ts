@@ -6,6 +6,7 @@ export interface GeometryOptions {
   flipX: boolean; // mirror everything left-right
   rowGap: number; // distance between treble rows, in button pitches
   range: { lo: number; hi: number } | null; // treble notes to show; null = the whole keyboard
+  rows: number[]; // treble rows to draw (hidden rows are folded away)
 }
 
 const PAD_X = 40;
@@ -49,6 +50,7 @@ export class Geometry {
   readonly bassOrder: number[]; // bass row indices from top to bottom
   private readonly rhX0: number;
   private readonly shear: number; // lane x shift per pixel of y
+  private readonly rowStep: number; // y distance from one row number to the next (negative when flipped)
   private readonly rhLine = new Map<number, number>();
   private readonly bassLine = new Map<number, number>();
   private readonly bassRows: number;
@@ -66,7 +68,7 @@ export class Geometry {
     const rhSpan = (this.hi - this.lo) / semis + 1;
     const bassSpan = bass.columns + this.bassSlant * (this.bassRows - 1);
     const g = opts.rowGap;
-    const rhUnits = (layout.rows.length - 1) * g + (2 * BUTTON) / semis;
+    const rhUnits = (opts.rows.length - 1) * g + (2 * BUTTON) / semis;
     const bassScale = BASS_LANES / semis; // bass pitch relative to the treble pitch
     const bassUnits = ((this.bassRows - 1) * BASS_ROW_GAP + 0.92) * bassScale;
     const stack = rhUnits + BOARD_GAP + METER + BOARD_GAP + bassUnits;
@@ -93,10 +95,10 @@ export class Geometry {
     this.bassRowsTop = height - PAD_Y - ((this.bassRows - 1) * this.bassRowGap + this.bassRadius * 2);
     this.meterH = p * METER;
     this.meterY = this.bassRowsTop - p * BOARD_GAP - this.meterH;
-    this.rhRowsTop = this.meterY - p * BOARD_GAP - ((layout.rows.length - 1) * this.rowGap + this.radius * 2);
+    this.rhRowsTop = this.meterY - p * BOARD_GAP - ((opts.rows.length - 1) * this.rowGap + this.radius * 2);
 
     // Default: treble row 1 on top (next to the roll), counter-bass on top (next to the bellows).
-    this.rhOrder = layout.rows.map(r => r.row);
+    this.rhOrder = layout.rows.map(r => r.row).filter(r => opts.rows.includes(r));
     this.bassOrder = bass.def.rows.map((_, i) => i);
     if (opts.flipY) {
       this.rhOrder.reverse();
@@ -109,7 +111,8 @@ export class Geometry {
     this.rollTop = PAD_Y;
     this.rollBottom = Math.min(...mainLines);
     this.lanesBottom = Math.max(...mainLines) + this.radius * 2;
-    this.shear = (layout.rowShift * p) / (this.rowLineY(2) - this.rowLineY(1));
+    this.rowStep = this.rowLineY(2) - this.rowLineY(1);
+    this.shear = (layout.rowShift * p) / this.rowStep;
 
     // Centre the whole lane fan (boards plus the leaning roll) horizontally.
     const xs = [this.lo, this.hi].flatMap(n => [this.rollTop, this.lanesBottom].map(y => this.laneXFrom(0, n, y)));
@@ -126,7 +129,9 @@ export class Geometry {
   private laneXFrom(x0: number, note: number, y: number): number {
     const b = this.layout.primary(note);
     const row = b?.row ?? this.layout.rows[0].row;
-    return x0 + this.layout.laneU(note, row) * this.pitch + (y - this.rowLineY(row)) * this.shear;
+    // Use where the row would be even if it's folded away, so lanes don't depend on what's shown.
+    const rowY = this.rowLineY(1) + (row - 1) * this.rowStep;
+    return x0 + this.layout.laneU(note, row) * this.pitch + (y - rowY) * this.shear;
   }
 
   // Centre of a note's lane at height y.
@@ -136,6 +141,10 @@ export class Geometry {
 
   rowLineY(row: number): number {
     return this.rhLine.get(row) ?? 0;
+  }
+
+  showsRow(row: number): boolean {
+    return this.rhLine.has(row);
   }
 
   // Judgment line of a row: the top of its buttons.

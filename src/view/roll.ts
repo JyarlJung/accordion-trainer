@@ -10,7 +10,6 @@ export interface RollState {
   judge: Judge;
   lookahead: number; // seconds of travel from the top to the highest judgment line
   loop: { a: number; b: number } | null;
-  showHelpers: boolean;
 }
 
 const NOTE_ALPHA = 0.5;
@@ -50,7 +49,7 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: 
   }
 
   for (const row of layout.rows) {
-    if (row.role !== 'main' && !s.showHelpers) continue;
+    if (!geo.showsRow(row.row)) continue;
     const y = geo.landY(row.row);
     ctx.globalAlpha = row.role === 'main' ? 0.55 : 0.2;
     ctx.strokeStyle = ROW_COLORS[row.row] ?? HELPER_ONLY;
