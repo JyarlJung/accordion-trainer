@@ -415,8 +415,13 @@ for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRa
   persist(el, key);
 }
 
+midi.onNoteOff = () => drawStage();
 midi.onNoteOn = (part, note) => {
-  if (part !== 'right') return;
+  if (part === 'right') judgePress(note);
+  drawStage();
+};
+
+function judgePress(note: number): void {
   const waitMode = ui.mode.value === 'wait';
   const result = waitMode
     ? pressInWaitMode(judge, transport, note)
@@ -429,13 +434,38 @@ midi.onNoteOn = (part, note) => {
     sink.noteOn(n.note, n.velocity);
     sounding.set(n.id, n);
   }
-};
+}
 midi.onPortsChanged = refreshPorts;
 refreshPorts();
 selectVoice(ui.output.value);
 void midi.init().then(refreshPorts);
 
 // ---------- frame loop ----------
+
+// Draws the board for the current state. Called every frame, and straight away on instrument
+// input so a key press shows up without waiting for the next frame.
+function drawStage(): void {
+  stage.draw({
+    time: transport.time,
+    notes,
+    judge,
+    lookahead: 4,
+    loop,
+    bars: song?.bars ?? [],
+    beats: song?.beats ?? [],
+    firstBar: song?.firstBar ?? 1,
+    held: midi.held.right,
+    bassHeld: midi.held.bass,
+    chordHeld: midi.held.chord,
+    pressure: midi.expression,
+    showHelpers: ui.helpers.checked,
+    showUpcoming: ui.upcoming.checked,
+    mirror: ui.mirror.checked,
+    mirrorX: ui.mirrorX.checked,
+    rowGap: Number(ui.rowGap.value),
+    range: ui.fitRange.checked ? songRange : null,
+  });
+}
 
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
@@ -477,26 +507,7 @@ function frame(now: number): void {
   }
   if (!waitMode && transport.playing) judge.update(t, transport.rate);
 
-  stage.draw({
-    time: t,
-    notes,
-    judge,
-    lookahead: 4,
-    loop,
-    bars: song?.bars ?? [],
-    beats: song?.beats ?? [],
-    firstBar: song?.firstBar ?? 1,
-    held: midi.held.right,
-    bassHeld: midi.held.bass,
-    chordHeld: midi.held.chord,
-    pressure: midi.expression,
-    showHelpers: ui.helpers.checked,
-    showUpcoming: ui.upcoming.checked,
-    mirror: ui.mirror.checked,
-    mirrorX: ui.mirrorX.checked,
-    rowGap: Number(ui.rowGap.value),
-    range: ui.fitRange.checked ? songRange : null,
-  });
+  drawStage();
 
   if (document.activeElement !== ui.seek && transport.duration > 0) {
     ui.seek.value = String(Math.round((t / transport.duration) * 1000));

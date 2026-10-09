@@ -35,7 +35,8 @@ body.collapsed #toolbarBody { display: none; }
   min-height: 32px;
 }
 .sep { width: 1px; height: 18px; background: var(--line); }
-.group { display: inline-flex; align-items: center; gap: 4px; }
+.group { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+#time { white-space: nowrap; }
 .group[hidden], .bar[hidden] { display: none; }
 
 /* Transport row stays visible even with the toolbar collapsed; the seek bar takes the spare width. */

@@ -36,7 +36,9 @@ export class Stage {
     private readonly layout: Layout,
     private readonly bass: BassLayout,
   ) {
-    this.ctx = canvas.getContext('2d')!;
+    // Low-latency canvas: presented without waiting in the compositor queue. Opaque, so each
+    // frame paints its own background.
+    this.ctx = canvas.getContext('2d', { desynchronized: true, alpha: false })!;
   }
 
   flash(note: number, kind: HitResult): void {
@@ -58,7 +60,8 @@ export class Stage {
     }
     const ctx = this.ctx;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#16161b';
+    ctx.fillRect(0, 0, w, h);
 
     const now = performance.now();
     this.flashes = this.flashes.filter(f => now - f.at < FLASH_MS);
