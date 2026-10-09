@@ -2,7 +2,7 @@ import type { BassLayout } from '../core/bassLayout';
 import type { Layout } from '../core/layout';
 import type { HitResult } from '../core/judge';
 import { drawBass, drawBellows } from './bass';
-import { DUPLICATE, EXPECT, HIT, LIVE, MISSED, ONSET } from './colors';
+import { DUPLICATE, EXPECT, HIT, LIVE, MISSED, ONSET, UPCOMING } from './colors';
 import { Geometry } from './geometry';
 import { drawGrid, type Mark } from './grid';
 import { drawLanes, drawNotes, type RollState } from './roll';
@@ -13,12 +13,14 @@ export interface ViewState extends RollState {
   chordHeld: ReadonlyMap<number, number>;
   pressure: number; // bellows, 0..1
   showHelpers: boolean; // rows 4-5
+  showUpcoming: boolean; // number the next few chords' buttons
   mirror: boolean; // flip top-bottom
   mirrorX: boolean; // flip left-right
   rowGap: number; // treble row spacing, in button pitches
   range: { lo: number; hi: number } | null; // treble notes to show; null = all
 }
 
+const UPCOMING_CHORDS = 3;
 const FLASH_MS = 400;
 const ONSET_FLASH = 0.12; // seconds of song time
 
@@ -98,6 +100,20 @@ export class Stage {
     const set = (id: string, m: Mark) => marks.set(id, { ...marks.get(id), ...m });
     const t = s.time;
 
+    // Upcoming chords: numbered outlines, fading with distance.
+    if (s.showUpcoming) {
+      let k = 0;
+      for (const c of s.judge.chords) {
+        if (c.time <= t + 0.02) continue;
+        if (k >= UPCOMING_CHORDS) break;
+        for (const id of c.ids) {
+          const b = this.layout.primary(s.notes[id].note);
+          if (b && !marks.has(b.id)) set(b.id, { ring: UPCOMING, badge: k + 1, alpha: 1 - k * 0.25 });
+        }
+        k++;
+      }
+    }
+
     // Notes that should be held right now.
     const expected = new Set<number>();
     for (const n of s.notes) {
@@ -110,7 +126,7 @@ export class Stage {
       const fill = state === 'hit' ? HIT : state === 'missed' ? MISSED : EXPECT;
       // Briefly flash at each onset so a repeated note reads as a new press.
       const onset = t - n.time < ONSET_FLASH && state !== 'hit';
-      set(primary.id, { fill: onset ? ONSET : fill, ring: onset ? '#fff' : undefined, alpha: 1 });
+      set(primary.id, { fill: onset ? ONSET : fill, ring: onset ? '#fff' : undefined, badge: undefined, alpha: 1 });
       if (s.showHelpers) for (const d of dups) set(d.id, { ring: DUPLICATE, alpha: 1 });
     }
 

@@ -44,6 +44,7 @@ const ui = {
   mirrorX: $<HTMLInputElement>('mirrorX'),
   rowGap: $<HTMLInputElement>('rowGap'),
   fitRange: $<HTMLInputElement>('fitRange'),
+  upcoming: $<HTMLInputElement>('upcoming'),
   volume: $<HTMLInputElement>('volume'),
   volumeLabel: $('volumeLabel'),
   rowGapLabel: $('rowGapLabel'),
@@ -363,7 +364,7 @@ ui.output.onchange = () => {
 persist(ui.volume, 'volume', applyVolume);
 persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.mode, 'mode');
-for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
+for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
   persist(el, key);
 }
 
@@ -433,6 +434,7 @@ function frame(now: number): void {
     chordHeld: midi.held.chord,
     pressure: midi.expression,
     showHelpers: ui.helpers.checked,
+    showUpcoming: ui.upcoming.checked,
     mirror: ui.mirror.checked,
     mirrorX: ui.mirrorX.checked,
     rowGap: Number(ui.rowGap.value),

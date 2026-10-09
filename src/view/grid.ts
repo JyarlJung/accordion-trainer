@@ -52,7 +52,8 @@ export function drawButton(
   ctx.fillText(label, x, y + 0.5);
 
   if (m?.badge) {
-    const bx = x + r * 0.72, by = y - r * 0.72, br = r * 0.36;
+    const br = Math.max(r * 0.36, 7);
+    const bx = x + r * 0.72, by = y - r * 0.72;
     ctx.beginPath();
     ctx.arc(bx, by, br, 0, Math.PI * 2);
     ctx.fillStyle = '#111';
