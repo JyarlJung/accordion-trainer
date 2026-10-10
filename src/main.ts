@@ -21,7 +21,6 @@ const ui = {
   songName: $('songName'),
   trackRows: $('trackRows'),
   parts: $('parts'),
-  split: $<HTMLSelectElement>('split'),
   topLine: $<HTMLInputElement>('topLine'),
   fit: $<HTMLInputElement>('fit'),
   transpose: $<HTMLSelectElement>('transpose'),
@@ -48,6 +47,8 @@ const ui = {
   helpers: $<HTMLInputElement>('helpers'),
   mirror: $<HTMLInputElement>('mirror'),
   mirrorX: $<HTMLInputElement>('mirrorX'),
+  noteNames: $<HTMLInputElement>('noteNames'),
+  bassChromatic: $<HTMLInputElement>('bassChromatic'),
   rowGap: $<HTMLInputElement>('rowGap'),
   fitRange: $<HTMLInputElement>('fitRange'),
   hitWindow: $<HTMLInputElement>('hitWindow'),
@@ -66,7 +67,8 @@ const synth = new SynthSink();
 const sampler = new SamplerSink();
 let sink: NoteSink = sampler;
 const bassLayout = new BassLayout(bassJson as BassLayoutDef);
-const stage = new Stage($<HTMLCanvasElement>('stage'), layout, bassLayout);
+const canvas = $<HTMLCanvasElement>('stage');
+const stage = new Stage(canvas, layout, bassLayout);
 
 let song: Song | null = null;
 let options: ExtractOptions | null = null;
@@ -101,10 +103,9 @@ function rangeFor(list: SongNote[]): { lo: number; hi: number } | null {
 
 function setSong(s: Song): void {
   song = s;
-  options = defaultOptions(s);
+  options = defaultOptions();
   ui.songName.textContent = s.name;
   ui.songName.classList.remove('muted');
-  ui.split.value = options.splitNote === null ? '' : String(options.splitNote);
   ui.topLine.checked = options.topLineOnly;
   ui.fit.checked = options.fitToRange;
   ui.transpose.value = String(options.transpose);
@@ -134,7 +135,7 @@ stage.onLayout = placePanels;
 function rebuild(t = transport.time): void {
   if (!song || !options) return;
   treble.notes = extractNotes(song, options, { min: layout.minNote, max: layout.maxNote });
-  bass.notes = extractBass(song, options);
+  bass.notes = extractBass(song, options, { min: layout.minNote, max: layout.maxNote });
   songRange = rangeFor(treble.notes);
   judge = new Judge(treble.notes, n => layout.primary(n) !== undefined);
   judge.windowSec = hitWindow();
@@ -187,13 +188,22 @@ function renderTracks(): void {
   }
 }
 
-ui.split.append(new Option('없음', ''));
-for (let n = 48; n <= 72; n++) ui.split.append(new Option(`${noteName(n)} 이상`, String(n)));
-ui.split.onchange = () => {
-  if (!options) return;
-  options.splitNote = ui.split.value === '' ? null : Number(ui.split.value);
+// Clicking a treble lane cuts it and every lane below it out of the right hand; a right click
+// hands that range to the bass instead. One cut at a time: a new click replaces it, and the
+// same click on the same lane again undoes it.
+function cutAt(e: MouseEvent, toBass: boolean): void {
+  const note = options ? stage.laneAt(e.offsetX, e.offsetY) : null;
+  if (!options || note === null) return;
+  e.preventDefault();
+  const c = options.cut;
+  options.cut = c && c.note === note && c.toBass === toBass ? null : { note, toBass };
   rebuild();
-};
+}
+canvas.addEventListener('click', e => cutAt(e, false));
+canvas.addEventListener('contextmenu', e => cutAt(e, true));
+canvas.addEventListener('mousemove', e => {
+  canvas.style.cursor = song && stage.laneAt(e.offsetX, e.offsetY) !== null ? 'pointer' : '';
+});
 ui.topLine.onchange = () => {
   if (!options) return;
   options.topLineOnly = ui.topLine.checked;
@@ -451,7 +461,7 @@ persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.mode, 'mode');
 persist(ui.loopUnit, 'loopUnit');
-for (const [el, key] of [[ui.sound, 'sound'], [ui.bassSound, 'bassSound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.thru, 'thru'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
+for (const [el, key] of [[ui.sound, 'sound'], [ui.bassSound, 'bassSound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.thru, 'thru'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
   persist(el, key);
 }
 
@@ -499,6 +509,9 @@ function drawStage(): void {
     bars: song?.bars ?? [],
     beats: song?.beats ?? [],
     firstBar: song?.firstBar ?? 1,
+    cut: options?.cut ?? null,
+    noteNames: ui.noteNames.checked,
+    bassChromatic: ui.bassChromatic.checked,
     held: midi.held.right,
     bassHeld: midi.held.bass,
     chordHeld: midi.held.chord,

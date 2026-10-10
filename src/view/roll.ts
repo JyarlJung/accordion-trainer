@@ -1,6 +1,6 @@
-import { isBlack, type Layout } from '../core/layout';
 import type { Judge } from '../core/judge';
-import type { BassNote, SongNote } from '../core/song';
+import { isBlack, noteName, type Layout } from '../core/layout';
+import type { BassNote, Cut, SongNote } from '../core/song';
 import { HELPER_ONLY, HIT, ROW_COLORS } from './colors';
 import type { Geometry } from './geometry';
 
@@ -14,6 +14,9 @@ export interface RollState {
   bars: number[];
   beats: number[];
   firstBar: number; // number shown for bars[0]
+  cut: Cut | null; // treble lanes cut away from the right hand
+  noteNames: boolean; // write each note's name on it
+  bassChromatic: boolean; // bass roll lanes in semitone order instead of the board's
 }
 
 const NOTE_ALPHA = 0.5;
@@ -82,6 +85,24 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, s: RollS
     }
   }
 
+  // Cut-away lanes, dimmed down through the board; tinted teal when they go to the bass.
+  if (s.cut) {
+    for (let note = geo.lo; note <= Math.min(geo.hi, s.cut.note); note++) {
+      const a = geo.laneX(note, y0), b = geo.laneX(note, y1);
+      ctx.beginPath();
+      ctx.moveTo(a - w / 2, y0);
+      ctx.lineTo(a + w / 2, y0);
+      ctx.lineTo(b + w / 2, y1);
+      ctx.lineTo(b - w / 2, y1);
+      ctx.fillStyle = 'rgba(8,8,12,0.55)';
+      ctx.fill();
+      if (s.cut.toBass) {
+        ctx.fillStyle = 'rgba(56,190,180,0.10)';
+        ctx.fill();
+      }
+    }
+  }
+
   // One shared judgment line, so notes of one chord always land together.
   ctx.strokeStyle = 'rgba(255,255,255,0.75)';
   ctx.lineWidth = 2;
@@ -96,6 +117,9 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, s: RollS
 export function drawNotes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
   const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;
   const half = geo.radius;
+  ctx.font = `600 ${Math.max(8, Math.min(11, geo.lane * 0.5))}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   for (const n of s.notes) {
     if (n.time > s.time + s.lookahead * 1.5) break;
     const b = layout.primary(n.note);
@@ -127,6 +151,14 @@ export function drawNotes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: 
     ctx.moveTo(xb - half, bottom);
     ctx.lineTo(xb + half, bottom);
     ctx.stroke();
+
+    // The name sits at the landing edge, so it stays readable as the note runs out. No octave:
+    // the lane says which one.
+    if (s.noteNames) {
+      const y = bottom - Math.min(bottom - top, 14) / 2;
+      ctx.fillStyle = '#fff';
+      ctx.fillText(noteName(n.note).replace(/-?\d+$/, ''), geo.laneX(n.note, y), y);
+    }
   }
   ctx.globalAlpha = 1;
 }

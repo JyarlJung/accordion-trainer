@@ -32,10 +32,17 @@ export interface Song {
   firstBar: number; // MIDI bar number of bars[0] (bars before it may have been trimmed)
 }
 
+export interface Cut {
+  note: number;
+  toBass: boolean;
+}
+
 export interface ExtractOptions {
   tracks: number[]; // right hand
   bassTracks: number[];
-  splitNote: number | null; // the right hand keeps notes >= splitNote, the bass the ones below
+  // Treble lanes cut away from the right hand: notes at or below `note` (as shown, after
+  // transposing and range fitting). With `toBass` they go to the bass part instead.
+  cut: Cut | null;
   topLineOnly: boolean;
   fitToRange: boolean;
   transpose: number; // semitones, applied before fitting to the range
@@ -151,13 +158,25 @@ function beatGrid(midi: Midi): { bars: number[]; beats: number[]; firstBarEnd: n
   return { bars, beats, firstBarEnd };
 }
 
-// Tracks start unassigned: the player picks each part's tracks. A single track usually holds
-// both hands, so it gets a split at middle C in case it's picked for both parts.
-export function defaultOptions(song: Song): ExtractOptions {
-  return {
-    tracks: [], bassTracks: [], splitNote: song.tracks.length === 1 ? 60 : null,
-    topLineOnly: false, fitToRange: true, transpose: 0,
-  };
+// Tracks start unassigned and nothing is cut: the player sets up each part.
+export function defaultOptions(): ExtractOptions {
+  return { tracks: [], bassTracks: [], cut: null, topLineOnly: false, fitToRange: true, transpose: 0 };
+}
+
+type Range = { min: number; max: number };
+
+// Where a note of the right hand shows: transposed, and moved by octaves into the keyboard's range.
+function treblePitch(n: RawNote, opts: ExtractOptions, range: Range): number {
+  let note = n.note + opts.transpose;
+  if (opts.fitToRange) {
+    while (note < range.min) note += 12;
+    while (note > range.max) note -= 12;
+  }
+  return note;
+}
+
+function isCut(n: RawNote, opts: ExtractOptions, range: Range): boolean {
+  return opts.cut !== null && treblePitch(n, opts, range) <= opts.cut.note;
 }
 
 // Groups of notes starting together, each sorted from low to high.
@@ -186,10 +205,13 @@ export interface BassNote extends SongNote {
 // The bass part, chords included. Each onset's lowest note is a bass note if it sounds alone or
 // stands a fifth or more below the rest (bass under a chord); the other notes are chord tones,
 // and close clusters (the "pah" of an oom-pah) are all chord tones. The bass side has no
-// octaves, so each pitch class appears once per role and onset.
-export function extractBass(song: Song, opts: ExtractOptions): BassNote[] {
-  const selected = new Set(opts.bassTracks);
-  const picked = song.notes.filter(n => selected.has(n.track) && (opts.splitNote === null || n.note < opts.splitNote));
+// octaves, so each pitch class appears once per role and onset. It takes the bass tracks, plus
+// the right hand's cut-away notes when the cut hands them to the bass.
+export function extractBass(song: Song, opts: ExtractOptions, range: Range): BassNote[] {
+  const bassTracks = new Set(opts.bassTracks);
+  const treble = new Set(opts.tracks);
+  const picked = song.notes.filter(n => bassTracks.has(n.track)
+    || (opts.cut?.toBass && treble.has(n.track) && isCut(n, opts, range)));
   const out: BassNote[] = [];
   for (const g of onsetGroups(picked)) {
     const bass = g.length === 1 || g[1].note - g[0].note >= BASS_GAP ? g[0] : null;
@@ -206,19 +228,15 @@ export function extractBass(song: Song, opts: ExtractOptions): BassNote[] {
   return out;
 }
 
-export function extractNotes(song: Song, opts: ExtractOptions, range: { min: number; max: number }): SongNote[] {
+export function extractNotes(song: Song, opts: ExtractOptions, range: Range): SongNote[] {
   const selected = new Set(opts.tracks);
-  let picked = song.notes.filter(n => selected.has(n.track) && (opts.splitNote === null || n.note >= opts.splitNote));
+  let picked = song.notes.filter(n => selected.has(n.track) && !isCut(n, opts, range));
   if (opts.topLineOnly) picked = onsetGroups(picked).map(g => g[g.length - 1]);
 
   const result: SongNote[] = [];
   const seen = new Set<string>();
   for (const n of picked) {
-    let note = n.note + opts.transpose;
-    if (opts.fitToRange) {
-      while (note < range.min) note += 12;
-      while (note > range.max) note -= 12;
-    }
+    const note = treblePitch(n, opts, range);
     const key = `${note}@${Math.round(n.time * 1000)}`;
     if (seen.has(key)) continue;
     seen.add(key);

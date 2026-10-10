@@ -78,7 +78,7 @@ export function drawButton(
 
 export function drawGrid(
   ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout,
-  marks: Map<string, Mark>,
+  marks: Map<string, Mark>, cutNote: number | null,
 ): void {
   const r = geo.radius;
   ctx.textAlign = 'center';
@@ -96,7 +96,8 @@ export function drawGrid(
     if (b.note < geo.lo || b.note > geo.hi || !geo.showsRow(b.row)) continue;
     const { x, y } = geo.pos(b);
     const m = marks.get(b.id);
-    ctx.globalAlpha = m?.alpha ?? (b.role === 'helper' && !m ? 0.55 : 1);
+    const cut = cutNote !== null && b.note <= cutNote;
+    ctx.globalAlpha = m?.alpha ?? (cut && !m ? 0.3 : b.role === 'helper' && !m ? 0.55 : 1);
     // Buttons are lane-sized, so only C carries its octave.
     const label = b.note % 12 === 0 ? noteName(b.note) : noteName(b.note).replace(/-?\d+$/, '');
     drawButton(ctx, x, y, r, label, {

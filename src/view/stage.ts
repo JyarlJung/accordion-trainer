@@ -44,6 +44,16 @@ export class Stage {
     this.ctx = canvas.getContext('2d', { desynchronized: true, alpha: false })!;
   }
 
+  // The treble lane under a point of the roll or board, or null.
+  laneAt(x: number, y: number): number | null {
+    const geo = this.geo;
+    if (!geo || y < geo.rollTop || y > geo.lanesBottom) return null;
+    for (let note = geo.lo; note <= geo.hi; note++) {
+      if (Math.abs(geo.laneX(note, y) - x) <= geo.lane / 2) return note;
+    }
+    return null;
+  }
+
   flash(note: number, kind: HitResult): void {
     this.flashes.push({ note, kind, at: performance.now() });
   }
@@ -71,7 +81,7 @@ export class Stage {
     this.flashes = this.flashes.filter(f => now - f.at < FLASH_MS);
 
     drawLanes(ctx, this.geo, s);
-    drawGrid(ctx, this.geo, this.layout, this.buildMarks(s));
+    drawGrid(ctx, this.geo, this.layout, this.buildMarks(s), s.cut?.note ?? null);
     drawNotes(ctx, this.geo, this.layout, s);
     drawBellows(ctx, this.geo, s.pressure);
     drawBass(ctx, this.geo, this.bass, this.buildBassMarks(s));

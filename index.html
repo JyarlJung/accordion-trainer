@@ -44,6 +44,9 @@
         <span class="sep"></span>
         <label><input type="checkbox" id="mirror" /> 위아래 반전</label>
         <label><input type="checkbox" id="mirrorX" /> 좌우 반전</label>
+        <span class="sep"></span>
+        <label><input type="checkbox" id="noteNames" checked /> 노트 음 이름</label>
+        <label title="베이스 롤 레인을 C C# D … 순서로 (끄면 보드와 같은 5도 순서)"><input type="checkbox" id="bassChromatic" /> 베이스 반음 순서</label>
         <span class="spacer"></span>
         <button id="resetPrefs" title="저장된 설정을 모두 지우고 기본값으로 시작">설정 초기화</button>
       </div>
@@ -51,7 +54,6 @@
         <div class="bar">
           <label class="btn">MIDI 열기<input type="file" id="file" accept=".mid,.midi" hidden /></label>
           <span id="songName"></span>
-          <label title="이 음 이상은 오른손, 아래는 베이스로 나눕니다 (두 파트가 같은 트랙을 쓸 때)">분할 <select id="split"></select></label>
           <label>조옮김 <select id="transpose"></select></label>
           <span class="sep"></span>
           <label><input type="checkbox" id="helpers" checked /> 4·5열</label>

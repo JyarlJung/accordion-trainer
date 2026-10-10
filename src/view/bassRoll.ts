@@ -8,13 +8,13 @@ const LABEL_H = 18; // lane names under the judgment line
 
 // The bass part's own roll beside the bass board. One lane per pitch class (the bass has no
 // octaves), in the board's column order around C, so moving across lanes is moving along the
-// board. Notes fall at the treble's speed, so both hands' rhythms read alike.
+// board (or, as an option, in semitone order). Notes fall at the treble's speed, so both hands' rhythms read alike.
 export function drawBassRoll(ctx: CanvasRenderingContext2D, geo: Geometry, bass: BassLayout, s: RollState): void {
   const box = geo.bassRoll;
   const w = box.right - box.left;
   const top = box.top, land = box.bottom - LABEL_H;
   if (w <= 0 || land <= top) return;
-  const lanes = bass.laneOrder();
+  const lanes = s.bassChromatic ? [...Array(12).keys()] : bass.laneOrder();
   if (geo.flipX) lanes.reverse();
   const laneW = w / lanes.length;
   const laneOf = new Map(lanes.map((pc, i) => [pc, i]));
@@ -66,6 +66,9 @@ export function drawBassRoll(ctx: CanvasRenderingContext2D, geo: Geometry, bass:
     }
   }
 
+  ctx.font = '600 11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   // A bass note and a chord tone can share a pitch class; draw that lane once.
   let groupTime = -Infinity;
   const drawn = new Set<number>();
@@ -92,6 +95,10 @@ export function drawBassRoll(ctx: CanvasRenderingContext2D, geo: Geometry, bass:
     ctx.moveTo(x, bottom);
     ctx.lineTo(x + bw, bottom);
     ctx.stroke();
+    if (s.noteNames) {
+      ctx.fillStyle = '#fff';
+      ctx.fillText(bassName(pc), x + bw / 2, bottom - Math.min(bottom - blockTop, 16) / 2);
+    }
   }
   ctx.restore();
 
