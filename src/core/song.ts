@@ -82,17 +82,21 @@ export function parseSong(data: ArrayBuffer, name: string): Song {
     notes.push(...own);
     tracks.push(trackInfo(index, decodeText(t.name).trim() || t.instrument.name || `트랙 ${index + 1}`, t.channel + 1, own));
   });
-  return trimLeadIn({ name, duration: midi.duration, tracks, notes: sortNotes(notes), firstBar: 1, ...beatGrid(midi) });
+  const { firstBarEnd, ...grid } = beatGrid(midi);
+  return fitLeadIn({ name, duration: midi.duration, tracks, notes: sortNotes(notes), firstBar: 1, ...grid }, firstBarEnd);
 }
 
 const MAX_LEAD_BARS = 2; // empty bars kept before the first note
 
-// Many MIDI files start with long silence; keep at most MAX_LEAD_BARS empty bars of it.
-function trimLeadIn(song: Song): Song {
+// Many MIDI files start with long silence; keep at most MAX_LEAD_BARS empty bars of it. A song
+// whose notes start in its very first bar gets one empty bar in front instead, so the first
+// notes don't arrive the moment playback starts.
+function fitLeadIn(song: Song, firstBarEnd: number): Song {
   if (song.notes.length === 0) return song;
   const first = song.notes[0].time;
   let firstNoteBar = 0;
   while (firstNoteBar + 1 < song.bars.length && song.bars[firstNoteBar + 1] <= first + 1e-6) firstNoteBar++;
+  if (firstNoteBar === 0) return padLeadIn(song, firstBarEnd);
   const cut = firstNoteBar - MAX_LEAD_BARS;
   if (cut <= 0) return song;
   const offset = song.bars[cut];
@@ -107,8 +111,24 @@ function trimLeadIn(song: Song): Song {
   };
 }
 
-// Bar and beat start times, following time-signature changes (tempo is handled by ticksToSeconds).
-function beatGrid(midi: Midi): { bars: number[]; beats: number[] } {
+// Puts one empty bar, as long as the first one (which ends at firstBarEnd), in front of the
+// song. It's numbered one less than the first bar.
+function padLeadIn(song: Song, firstBarEnd: number): Song {
+  const bar = firstBarEnd - song.bars[0];
+  const shift = (t: number) => t + bar;
+  return {
+    ...song,
+    duration: song.duration + bar,
+    notes: song.notes.map(n => ({ ...n, time: shift(n.time) })),
+    bars: [song.bars[0], ...song.bars.map(shift)],
+    beats: [...song.beats.filter(t => t < firstBarEnd - 1e-6), ...song.beats.map(shift)],
+    firstBar: song.firstBar - 1,
+  };
+}
+
+// Bar and beat start times, following time-signature changes (tempo is handled by ticksToSeconds),
+// and where the first bar ends (the grid itself stops at the song's last bar).
+function beatGrid(midi: Midi): { bars: number[]; beats: number[]; firstBarEnd: number } {
   const ppq = midi.header.ppq;
   const sigs = midi.header.timeSignatures.length
     ? [...midi.header.timeSignatures].sort((a, b) => a.ticks - b.ticks)
@@ -118,6 +138,7 @@ function beatGrid(midi: Midi): { bars: number[]; beats: number[] } {
   const beats: number[] = [];
   let tick = 0;
   let i = 0;
+  let firstBarEnd = 0;
   while (tick <= end) {
     while (i + 1 < sigs.length && sigs[i + 1].ticks <= tick) i++;
     const [num, den] = sigs[i].timeSignature;
@@ -125,8 +146,9 @@ function beatGrid(midi: Midi): { bars: number[]; beats: number[] } {
     bars.push(midi.header.ticksToSeconds(tick));
     for (let b = 0; b < num; b++) beats.push(midi.header.ticksToSeconds(tick + b * beatTicks));
     tick += beatTicks * num;
+    if (bars.length === 1) firstBarEnd = midi.header.ticksToSeconds(tick);
   }
-  return { bars, beats };
+  return { bars, beats, firstBarEnd };
 }
 
 // Tracks start unassigned: the player picks each part's tracks. A single track usually holds
