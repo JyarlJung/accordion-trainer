@@ -182,7 +182,7 @@ export class Stage {
       const [primary, ...dups] = this.layout.candidates(n.note);
       if (!primary) continue;
       expected.add(n.note);
-      const state = s.judge.state[n.id];
+      const state = s.judge.state[n.id] === 'hit' && s.letGo.has(n.id) ? 'pending' : s.judge.state[n.id];
       const fill = state === 'hit' ? HIT : state === 'missed' ? MISSED : EXPECT;
       // Briefly flash at each onset so a repeated note reads as a new press.
       const onset = t - n.time < ONSET_FLASH && state !== 'hit';

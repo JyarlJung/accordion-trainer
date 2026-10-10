@@ -84,6 +84,11 @@ const bass = new PartPlayer<BassNote>(n => (n.chord ? midi.channels.chord : midi
 let judge = new Judge([]);
 const waiter = new WaitMode();
 const inputHeld = new Set<number>(); // right-hand pitches sounding from the player's keys (see followInput)
+const FREE_VELOCITY = 0.8; // for presses that don't match a song note
+// Wait mode: a hit note whose key is let go before the note ends goes back to its unplayed
+// colour (the hit still counts).
+const hitKeys = new Map<number, number>(); // right-hand pitch -> id of the note its press hit
+const letGo = new Set<number>();
 let loopStart: number | null = null;
 let loop: { a: number; b: number } | null = null;
 let songRange: { lo: number; hi: number } | null = null;
@@ -159,6 +164,8 @@ function seek(t: number, resetStats = false): void {
   bass.seek(transport.time);
   judge.resetFrom(transport.time, resetStats);
   waiter.reset();
+  hitKeys.clear();
+  letGo.clear();
 }
 
 function silence(): void {
@@ -507,6 +514,12 @@ ui.followInput.addEventListener('change', silence);
 
 midi.onNoteOff = (part, note) => {
   if (part === 'right' && inputHeld.delete(note)) trebleVoice.sink.noteOff(note, midi.channels.right);
+  const id = part === 'right' ? hitKeys.get(note) : undefined;
+  if (id !== undefined) {
+    hitKeys.delete(note);
+    const n = treble.notes[id];
+    if (ui.mode.value === 'wait' && transport.time < n.time + n.duration) letGo.add(id);
+  }
   drawStage();
 };
 // How early or late each press lands against the song note it plays, after the delay
@@ -525,23 +538,27 @@ function measurePress(part: Part, note: number): void {
   if (at !== null) beatMeter.push(((played - at) / transport.rate) * 1000);
 }
 
-midi.onNoteOn = (part, note, velocity) => {
+midi.onNoteOn = (part, note) => {
   measurePress(part, note);
-  if (part === 'right') judgePress(note, velocity);
+  if (part === 'right') judgePress(note);
   drawStage();
 };
 
-function judgePress(note: number, velocity: number): void {
+function judgePress(note: number): void {
   const waitMode = ui.mode.value === 'wait';
   const waited = transport.waiting;
   const result = waitMode
     ? pressInWaitMode(judge, transport, note, latency())
     : judge.onNoteOn(note, transport.time - latency() * transport.rate, transport.rate);
   stage.flash(note, result);
+  if (waitMode && result === 'hit' && judge.lastHit !== null) hitKeys.set(note, judge.lastHit);
   if (waitMode && ui.sound.checked && followInput()) {
+    // Key velocity is ignored, like the bellows: a hit sounds at its written velocity, any
+    // other press at a fixed one.
     startSound();
-    const taken = result === 'hit' && judge.lastHit !== null && treble.claim(judge.lastHit);
-    if (!taken) trebleVoice.sink.noteOn(note, velocity, midi.channels.right);
+    const hit = result === 'hit' ? judge.lastHit : null;
+    const taken = hit !== null && treble.claim(hit);
+    if (!taken) trebleVoice.sink.noteOn(note, hit !== null ? treble.notes[hit].velocity : FREE_VELOCITY, midi.channels.right);
     inputHeld.add(note);
     return;
   }
@@ -579,6 +596,7 @@ function drawStage(): void {
     beats: song?.beats ?? [],
     firstBar: song?.firstBar ?? 1,
     cut: options?.cut ?? null,
+    letGo,
     noteNames: ui.noteNames.checked,
     bassChromatic: ui.bassChromatic.checked,
     held: midi.held.right,

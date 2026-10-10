@@ -15,6 +15,7 @@ export interface RollState {
   beats: number[];
   firstBar: number; // number shown for bars[0]
   cut: Cut | null; // treble lanes cut away from the right hand
+  letGo: ReadonlySet<number>; // hit notes whose key was let go before they ended: shown unplayed again
   noteNames: boolean; // write each note's name on it
   bassChromatic: boolean; // bass roll lanes in semitone order instead of the board's
 }
@@ -131,7 +132,7 @@ export function drawNotes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: 
     if (top >= bottom || bottom < geo.rollTop) continue;
     const xb = geo.laneX(n.note, bottom), xt = geo.laneX(n.note, top);
     const state = s.judge.state[n.id];
-    const color = state === 'hit' ? HIT : b.role === 'main' ? ROW_COLORS[b.row] : HELPER_ONLY;
+    const color = state === 'hit' && !s.letGo.has(n.id) ? HIT : b.role === 'main' ? ROW_COLORS[b.row] : HELPER_ONLY;
     const faded = state === 'missed' || state === 'skipped';
 
     ctx.globalAlpha = faded ? NOTE_ALPHA * 0.4 : NOTE_ALPHA;
