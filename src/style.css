@@ -65,7 +65,7 @@ button.primary { background: var(--accent); border-color: var(--accent); min-wid
 button.active { outline: 2px solid #ffd54f; }
 
 #rate, #volume, #rowGap, #hitWindow { width: 90px; }
-#midiIn, #output { max-width: 180px; }
+#midiIn, #output, #bassOutput { max-width: 180px; }
 
 main { flex: 1; min-height: 0; position: relative; }
 

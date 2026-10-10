@@ -59,20 +59,24 @@ export class MidiIO {
     if (this.input) this.input.onmidimessage = e => this.handle(e.data);
   }
 
+  // The output soft thru echoes to.
   selectOutput(id: string | null): void {
     this.output = (id && this.access?.outputs.get(id)) || null;
   }
 
-  send(bytes: number[]): void {
-    this.output?.send(bytes);
+  // Sends to an output port by id (each part's voice can use its own).
+  sendTo(id: string, bytes: number[]): void {
+    this.access?.outputs.get(id)?.send(bytes);
   }
 
-  // Stops soft thru and silences every channel of the output (used when the app closes).
+  // Stops soft thru and silences every channel of every output (used when the app closes).
   shutdown(): void {
     this.thru = false;
-    for (let ch = 0; ch < 16; ch++) {
-      this.send([0xb0 | ch, 123, 0]); // All Notes Off
-      this.send([0xb0 | ch, 120, 0]); // All Sound Off
+    for (const out of this.access?.outputs.values() ?? []) {
+      for (let ch = 0; ch < 16; ch++) {
+        out.send([0xb0 | ch, 123, 0]); // All Notes Off
+        out.send([0xb0 | ch, 120, 0]); // All Sound Off
+      }
     }
   }
 

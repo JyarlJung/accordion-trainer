@@ -8,9 +8,10 @@ import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode } from './core/practice';
 import { MidiIO } from './io/midi';
-import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, setVolume, type NoteSink, type SampleSet } from './io/audio';
+import { BUILTIN_SETS, setVolume, type SampleSet } from './io/audio';
 import { PartPlayer } from './io/player';
 import { userSampleSets } from './io/sampleSets';
+import { PartVoice } from './io/voice';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
 import type { Geometry } from './view/geometry';
 import { Stage } from './view/stage';
@@ -39,6 +40,7 @@ const ui = {
   sound: $<HTMLInputElement>('sound'),
   bassSound: $<HTMLInputElement>('bassSound'),
   output: $<HTMLSelectElement>('output'),
+  bassOutput: $<HTMLSelectElement>('bassOutput'),
   midiIn: $<HTMLSelectElement>('midiIn'),
   chRight: $<HTMLSelectElement>('chRight'),
   chBass: $<HTMLSelectElement>('chBass'),
@@ -63,9 +65,8 @@ const ui = {
 const layout = new Layout(layoutJson as LayoutDef);
 const transport = new Transport();
 const midi = new MidiIO();
-const synth = new SynthSink();
-const sampler = new SamplerSink();
-let sink: NoteSink = sampler;
+const trebleVoice = new PartVoice(midi, () => [midi.channels.right]);
+const bassVoice = new PartVoice(midi, () => [midi.channels.bass, midi.channels.chord]);
 const bassLayout = new BassLayout(bassJson as BassLayoutDef);
 const canvas = $<HTMLCanvasElement>('stage');
 const stage = new Stage(canvas, layout, bassLayout);
@@ -153,7 +154,8 @@ function seek(t: number, resetStats = false): void {
 }
 
 function silence(): void {
-  sink.allOff();
+  trebleVoice.sink.allOff();
+  bassVoice.sink.allOff();
   treble.stop();
   bass.stop();
 }
@@ -266,9 +268,8 @@ function togglePlay(): void {
 
 // Audio needs a user gesture to start; play and key presses both count.
 function startSound(): void {
-  if (sink === synth) void synth.start();
-  if (sink === sampler) void sampler.start();
-  if (sink instanceof MidiOutSink) sink.prime();
+  trebleVoice.start();
+  bassVoice.start();
 }
 
 function clearLoop(): void {
@@ -319,7 +320,8 @@ ui.loopB.onclick = () => {
 ui.loopClear.onclick = clearLoop;
 function applyVolume(): void {
   setVolume(Number(ui.volume.value));
-  if (sink instanceof MidiOutSink) sink.setLevel(Number(ui.volume.value));
+  trebleVoice.setLevel(Number(ui.volume.value));
+  bassVoice.setLevel(Number(ui.volume.value));
   ui.volumeLabel.textContent = `${Math.round(Number(ui.volume.value) * 100)}%`;
 }
 ui.volume.oninput = applyVolume;
@@ -405,44 +407,45 @@ function refreshPorts(): void {
   ui.midiIn.value = pick?.id ?? '';
   if ((pick?.id ?? null) !== current) midi.selectInput(pick?.id ?? null);
 
-  const saved = getPref('output');
-  const outValue = ui.output.value || (typeof saved === 'string' ? saved : defaultVoice);
-  ui.output.replaceChildren();
-  for (const s of sampleSets) ui.output.append(new Option(s.label, `set:${s.id}`));
-  ui.output.append(new Option('신시', 'synth'));
-  for (const p of midi.outputs()) ui.output.append(new Option(`MIDI: ${p.name}`, `midi:${p.id}`));
-  ui.output.value = [...ui.output.options].some(o => o.value === outValue) ? outValue : defaultVoice;
-  // A saved MIDI output only appears once MIDI is ready; switch to it then.
-  if (activeVoice !== null && ui.output.value !== activeVoice) selectVoice(ui.output.value);
+  fillVoices(ui.output, 'output', trebleVoice, 'treble');
+  fillVoices(ui.bassOutput, 'bassOutput', bassVoice, 'bass');
 }
 
-// Sound choices: sample sets, the synth, or a MIDI output.
-// User sample sets arrive asynchronously (read from disk); built-in sets until then.
+// Sound choices for each part: sample sets, the synth, or a MIDI output. User sample sets
+// arrive asynchronously (read from disk); built-in sets until then.
 let sampleSets: SampleSet[] = [...BUILTIN_SETS];
-let defaultVoice = `set:${sampleSets[0].id}`;
 
-let activeVoice: string | null = null;
+// A part's default: the first set meant for it, else the first set.
+function defaultVoice(part: 'treble' | 'bass'): string {
+  return `set:${(sampleSets.find(s => (s.part ?? 'treble') === part) ?? sampleSets[0]).id}`;
+}
 
-// Soft thru only makes sense while the song goes to a MIDI output.
+function fillVoices(select: HTMLSelectElement, key: string, voice: PartVoice, part: 'treble' | 'bass'): void {
+  const saved = getPref(key);
+  const want = select.value || (typeof saved === 'string' ? saved : defaultVoice(part));
+  select.replaceChildren();
+  for (const s of sampleSets) select.append(new Option(s.label, `set:${s.id}`));
+  select.append(new Option('신시', 'synth'));
+  for (const p of midi.outputs()) select.append(new Option(`MIDI: ${p.name}`, `midi:${p.id}`));
+  select.value = [...select.options].some(o => o.value === want) ? want : defaultVoice(part);
+  // A saved MIDI output only appears once MIDI is ready; switch to it then.
+  if (voice.value !== null && select.value !== voice.value) selectVoice(voice, select.value);
+}
+
+// Soft thru echoes the right hand to the right hand's MIDI output, so it only makes sense
+// while that part plays on one.
 function applyThru(): void {
-  midi.thru = ui.thru.checked && (activeVoice?.startsWith('midi:') ?? false);
+  midi.selectOutput(trebleVoice.midiPort);
+  midi.thru = ui.thru.checked && trebleVoice.midiPort !== null;
 }
 ui.thru.onchange = applyThru;
 
-function selectVoice(value: string): void {
-  activeVoice = value;
+function selectVoice(voice: PartVoice, value: string): void {
   silence();
-  midi.selectOutput(null);
-  if (value === 'synth') {
-    sink = synth;
-  } else if (value.startsWith('midi:')) {
-    midi.selectOutput(value.slice(5));
-    sink = new MidiOutSink(midi, Number(ui.volume.value), [midi.channels.right, midi.channels.bass, midi.channels.chord]);
-  } else {
-    const set = sampleSets.find(s => `set:${s.id}` === value)!;
-    sink = sampler;
-    sampler.load(set).catch(e => alert(`음색을 불러오지 못했습니다: ${set.label}\n${e}`));
-  }
+  voice.choose(value, sampleSets, Number(ui.volume.value)).catch(e => {
+    const set = sampleSets.find(s => `set:${s.id}` === value);
+    alert(`음색을 불러오지 못했습니다: ${set?.label ?? value}\n${e}`);
+  });
   applyThru();
 }
 
@@ -451,8 +454,12 @@ ui.midiIn.onchange = () => {
   setPref('midiIn', ui.midiIn.selectedOptions[0]?.text ?? '');
 };
 ui.output.onchange = () => {
-  selectVoice(ui.output.value);
+  selectVoice(trebleVoice, ui.output.value);
   setPref('output', ui.output.value);
+};
+ui.bassOutput.onchange = () => {
+  selectVoice(bassVoice, ui.bassOutput.value);
+  setPref('bassOutput', ui.bassOutput.value);
 };
 
 // Restore the remembered settings (song-specific options are left out on purpose).
@@ -480,7 +487,7 @@ function judgePress(note: number): void {
   // Wait mode stays quiet until a note is played right, then sounds it for its written length.
   if (result === 'hit' && waitMode && ui.sound.checked && judge.lastHit !== null) {
     startSound();
-    treble.play(sink, treble.notes[judge.lastHit]);
+    treble.play(trebleVoice.sink, treble.notes[judge.lastHit]);
   }
 }
 midi.onPortsChanged = refreshPorts;
@@ -488,9 +495,9 @@ midi.onPortsChanged = refreshPorts;
 // (and the online GM set isn't fetched for nothing).
 void userSampleSets().then(list => {
   sampleSets = [...list, ...BUILTIN_SETS];
-  defaultVoice = `set:${sampleSets[0].id}`;
   refreshPorts();
-  selectVoice(ui.output.value);
+  selectVoice(trebleVoice, ui.output.value);
+  selectVoice(bassVoice, ui.bassOutput.value);
   void midi.init().then(refreshPorts);
 });
 
@@ -549,8 +556,8 @@ function frame(now: number): void {
 
   // In wait mode right-hand notes sound when they're played right (see judgePress), not on
   // arrival. The bass isn't judged, so it plays along either way.
-  treble.update(sink, t, ui.sound.checked && transport.playing && !waitMode);
-  bass.update(sink, t, ui.bassSound.checked && transport.playing);
+  treble.update(trebleVoice.sink, t, ui.sound.checked && transport.playing && !waitMode);
+  bass.update(bassVoice.sink, t, ui.bassSound.checked && transport.playing);
   if (!waitMode && transport.playing) judge.update(t, transport.rate);
 
   drawStage();

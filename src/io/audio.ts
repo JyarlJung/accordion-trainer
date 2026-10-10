@@ -58,6 +58,7 @@ export interface SampleSet {
   loop?: [number, number] | false;
   maxHold?: number; // seconds a held note lasts before fading out on its own
   release?: number;
+  part?: 'treble' | 'bass'; // which part picks this set by default
 }
 
 const GM_ACCORDION = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/accordion-mp3/';
@@ -105,6 +106,19 @@ function makeSample(root: number, buffer: Tone.ToneAudioBuffer, loop: [number, n
   };
 }
 
+// Decoded samples by URL, shared when both parts use the same set.
+const buffers = new Map<string, Promise<Tone.ToneAudioBuffer>>();
+
+function loadBuffer(url: string): Promise<Tone.ToneAudioBuffer> {
+  let b = buffers.get(url);
+  if (!b) {
+    b = new Tone.ToneAudioBuffer().load(url);
+    b.catch(() => buffers.delete(url)); // let a failed load be retried
+    buffers.set(url, b);
+  }
+  return b;
+}
+
 // Sample player. By default it loops the middle of each sample so held notes sustain; a set can
 // instead play samples once (natural decay) and/or cap how long a held note lasts.
 export class SamplerSink implements NoteSink {
@@ -119,7 +133,7 @@ export class SamplerSink implements NoteSink {
     this.samples = [];
     const loop = set.loop ?? [0.35, 0.8];
     const loaded = await Promise.all(Object.entries(set.urls).map(async ([name, file]) =>
-      makeSample(Tone.Frequency(name).toMidi(), await new Tone.ToneAudioBuffer().load(set.baseUrl + file), loop)));
+      makeSample(Tone.Frequency(name).toMidi(), await loadBuffer(set.baseUrl + file), loop)));
     // Ignore a stale load if another set was chosen meanwhile.
     if (this.set === set) this.samples = loaded;
   }
@@ -190,7 +204,7 @@ export class MidiOutSink implements NoteSink {
   private readonly on = new Set<number>(); // channel * 128 + note
   private readonly channels: Set<number>;
 
-  constructor(private readonly io: MidiIO, private level: number, channels: number[]) {
+  constructor(private readonly io: MidiIO, private readonly port: string, private level: number, channels: number[]) {
     this.channels = new Set(channels);
   }
 
@@ -199,7 +213,7 @@ export class MidiOutSink implements NoteSink {
   setLevel(level: number): void {
     this.level = level;
     if (this.playerBellows()) return;
-    for (const ch of this.channels) this.io.send([0xb0 | (ch - 1), 11, Math.round(level * 127)]);
+    for (const ch of this.channels) this.io.sendTo(this.port, [0xb0 | (ch - 1), 11, Math.round(level * 127)]);
   }
 
   prime(): void {
@@ -213,20 +227,20 @@ export class MidiOutSink implements NoteSink {
   noteOn(note: number, velocity: number, channel: number): void {
     this.channels.add(channel);
     this.prime();
-    this.io.send([0x90 | (channel - 1), note, Math.max(1, Math.round(velocity * 127))]);
+    this.io.sendTo(this.port, [0x90 | (channel - 1), note, Math.max(1, Math.round(velocity * 127))]);
     this.on.add(channel * 128 + note);
   }
 
   noteOff(note: number, channel: number): void {
-    this.io.send([0x80 | (channel - 1), note, 0]);
+    this.io.sendTo(this.port, [0x80 | (channel - 1), note, 0]);
     this.on.delete(channel * 128 + note);
   }
 
   allOff(): void {
     for (const key of this.on) this.noteOff(key % 128, key >> 7);
     for (const ch of this.channels) {
-      this.io.send([0xb0 | (ch - 1), 123, 0]); // All Notes Off
-      this.io.send([0xb0 | (ch - 1), 120, 0]); // All Sound Off
+      this.io.sendTo(this.port, [0xb0 | (ch - 1), 123, 0]); // All Notes Off
+      this.io.sendTo(this.port, [0xb0 | (ch - 1), 120, 0]); // All Sound Off
     }
   }
 }

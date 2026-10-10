@@ -23,6 +23,8 @@ export interface ViewState extends RollState {
 }
 
 const FLASH_MS = 400;
+const MIN_W = 320;
+const MIN_H = 240;
 const ONSET_FLASH = 0.12; // seconds of song time
 
 export class Stage {
@@ -65,6 +67,8 @@ export class Stage {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(h * dpr);
     }
+    // Too small to lay out (e.g. a hidden or minimised window): the layout would go negative.
+    if (w < MIN_W || h < MIN_H) return;
     const rows = this.visibleRows(s);
     const key = `${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}:${s.range?.lo}-${s.range?.hi}:${rows}`;
     if (!this.geo || key !== this.geoKey) {
