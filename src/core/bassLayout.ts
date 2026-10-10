@@ -60,6 +60,13 @@ export class BassLayout {
     return [...fundamental, ...counter];
   }
 
+  // The two buttons that play a bass note: its fundamental and its counter-bass, each in the
+  // column nearest C. Either one is a right way to play it.
+  mainButtons(note: number): BassButton[] {
+    const all = this.forBassNote(note);
+    return (['bass', 'counter'] as const).map(row => all.find(b => b.row === row)!);
+  }
+
   // Identifies one chord button from the held notes (any octave or inversion).
   forChord(notes: Iterable<number>): BassButton | undefined {
     const held = [...notes].sort((a, b) => a - b);

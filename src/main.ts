@@ -3,21 +3,26 @@ import layoutJson from '../layouts/fr4xb-c-griff-europe.json';
 import bassJson from '../layouts/fr4xb-stradella-2row.json';
 import { BassLayout, type BassLayoutDef } from './core/bassLayout';
 import { Layout, noteName, type LayoutDef } from './core/layout';
-import { extractNotes, guessOptions, lowerBound, parseSong, type ExtractOptions, type Song, type SongNote } from './core/song';
+import { defaultOptions, extractBass, extractNotes, parseSong, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode } from './core/practice';
 import { MidiIO } from './io/midi';
 import { BUILTIN_SETS, MidiOutSink, SamplerSink, SynthSink, setVolume, type NoteSink, type SampleSet } from './io/audio';
+import { PartPlayer } from './io/player';
 import { userSampleSets } from './io/sampleSets';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
+import type { Geometry } from './view/geometry';
 import { Stage } from './view/stage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const ui = {
   file: $<HTMLInputElement>('file'),
   songName: $('songName'),
-  tracks: $('tracks'),
+  trebleTracks: $('trebleTracks'),
+  bassTracks: $('bassTracks'),
+  treblePanel: $('treblePanel'),
+  bassPanel: $('bassPanel'),
   split: $<HTMLSelectElement>('split'),
   topLine: $<HTMLInputElement>('topLine'),
   fit: $<HTMLInputElement>('fit'),
@@ -35,6 +40,7 @@ const ui = {
   loopUnit: $<HTMLSelectElement>('loopUnit'),
   mode: $<HTMLSelectElement>('mode'),
   sound: $<HTMLInputElement>('sound'),
+  bassSound: $<HTMLInputElement>('bassSound'),
   output: $<HTMLSelectElement>('output'),
   midiIn: $<HTMLSelectElement>('midiIn'),
   chRight: $<HTMLSelectElement>('chRight'),
@@ -66,11 +72,10 @@ const stage = new Stage($<HTMLCanvasElement>('stage'), layout, bassLayout);
 
 let song: Song | null = null;
 let options: ExtractOptions | null = null;
-let notes: SongNote[] = [];
+const treble = new PartPlayer(() => midi.channels.right);
+const bass = new PartPlayer(() => midi.channels.bass);
 let judge = new Judge([]);
 const waiter = new WaitMode();
-let nextIdx = 0; // next song note to sound
-const sounding = new Map<number, SongNote>();
 let loopStart: number | null = null;
 let loop: { a: number; b: number } | null = null;
 let songRange: { lo: number; hi: number } | null = null;
@@ -98,7 +103,7 @@ function rangeFor(list: SongNote[]): { lo: number; hi: number } | null {
 
 function setSong(s: Song): void {
   song = s;
-  options = guessOptions(s);
+  options = defaultOptions(s);
   ui.songName.textContent = s.name;
   ui.songName.classList.remove('muted');
   ui.split.value = options.splitNote === null ? '' : String(options.splitNote);
@@ -119,11 +124,26 @@ async function loadFile(file: File): Promise<void> {
   }
 }
 
+// The part panels sit on either side of the bass board and bellows meter, in the room the
+// bass board's width cap leaves.
+const PANEL_GAP = 16;
+function placePanels(geo: Geometry): void {
+  const { left, right, bottom } = geo.bassBox;
+  const top = geo.meterY;
+  const place = (el: HTMLElement, x0: number, x1: number) => Object.assign(el.style, {
+    left: `${x0}px`, width: `${Math.max(0, x1 - x0)}px`, top: `${top}px`, height: `${bottom - top}px`,
+  });
+  place(ui.treblePanel, geo.left, left - PANEL_GAP);
+  place(ui.bassPanel, right + PANEL_GAP, geo.right);
+}
+stage.onLayout = placePanels;
+
 function rebuild(t = transport.time): void {
   if (!song || !options) return;
-  notes = extractNotes(song, options, { min: layout.minNote, max: layout.maxNote });
-  songRange = rangeFor(notes);
-  judge = new Judge(notes, n => layout.primary(n) !== undefined);
+  treble.notes = extractNotes(song, options, { min: layout.minNote, max: layout.maxNote });
+  bass.notes = extractBass(song, options);
+  songRange = rangeFor(treble.notes);
+  judge = new Judge(treble.notes, n => layout.primary(n) !== undefined);
   judge.windowSec = hitWindow();
   transport.duration = song.duration;
   seek(t, true);
@@ -132,33 +152,40 @@ function rebuild(t = transport.time): void {
 function seek(t: number, resetStats = false): void {
   transport.seek(t);
   silence();
-  nextIdx = lowerBound(notes, transport.time);
+  treble.seek(transport.time);
+  bass.seek(transport.time);
   judge.resetFrom(transport.time, resetStats);
   waiter.reset();
 }
 
 function silence(): void {
   sink.allOff();
-  sounding.clear();
+  treble.stop();
+  bass.stop();
 }
 
 function renderTracks(): void {
-  ui.tracks.replaceChildren();
+  renderTrackList(ui.trebleTracks, 'tracks');
+  renderTrackList(ui.bassTracks, 'bassTracks');
+}
+
+function renderTrackList(box: HTMLElement, part: 'tracks' | 'bassTracks'): void {
+  box.replaceChildren();
   if (!song || !options) return;
   const opts = options;
   for (const t of song.tracks) {
     const label = document.createElement('label');
     const cb = document.createElement('input');
     cb.type = 'checkbox';
-    cb.checked = opts.tracks.includes(t.index);
+    cb.checked = opts[part].includes(t.index);
     cb.onchange = () => {
-      opts.tracks = cb.checked ? [...opts.tracks, t.index] : opts.tracks.filter(i => i !== t.index);
+      opts[part] = cb.checked ? [...opts[part], t.index] : opts[part].filter(i => i !== t.index);
       rebuild();
     };
     const info = document.createElement('small');
     info.textContent = `ch${t.channel} · ${t.noteCount}음 · ${noteName(t.minNote)}–${noteName(t.maxNote)}`;
     label.append(cb, t.name, info);
-    ui.tracks.append(label);
+    box.append(label);
   }
 }
 
@@ -349,6 +376,7 @@ for (const [part, select] of [['right', ui.chRight], ['bass', ui.chBass], ['chor
   for (let c = 1; c <= 16; c++) select.append(new Option(String(c), String(c)));
   select.value = String(midi.channels[part]);
   const apply = () => {
+    silence(); // notes already sounding belong to the old channel
     midi.channels[part] = Number(select.value);
   };
   select.addEventListener('change', apply);
@@ -401,7 +429,7 @@ function selectVoice(value: string): void {
     sink = synth;
   } else if (value.startsWith('midi:')) {
     midi.selectOutput(value.slice(5));
-    sink = new MidiOutSink(midi, midi.channels.right, Number(ui.volume.value));
+    sink = new MidiOutSink(midi, Number(ui.volume.value), [midi.channels.right, midi.channels.bass]);
   } else {
     const set = sampleSets.find(s => `set:${s.id}` === value)!;
     sink = sampler;
@@ -425,7 +453,7 @@ persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.mode, 'mode');
 persist(ui.loopUnit, 'loopUnit');
-for (const [el, key] of [[ui.sound, 'sound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.thru, 'thru'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
+for (const [el, key] of [[ui.sound, 'sound'], [ui.bassSound, 'bassSound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.thru, 'thru'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX']] as const) {
   persist(el, key);
 }
 
@@ -443,10 +471,8 @@ function judgePress(note: number): void {
   stage.flash(note, result);
   // Wait mode stays quiet until a note is played right, then sounds it for its written length.
   if (result === 'hit' && waitMode && ui.sound.checked && judge.lastHit !== null) {
-    const n = notes[judge.lastHit];
     startSound();
-    sink.noteOn(n.note, n.velocity);
-    sounding.set(n.id, n);
+    treble.play(sink, treble.notes[judge.lastHit]);
   }
 }
 midi.onPortsChanged = refreshPorts;
@@ -467,7 +493,8 @@ void userSampleSets().then(list => {
 function drawStage(): void {
   stage.draw({
     time: transport.time,
-    notes,
+    notes: treble.notes,
+    bassNotes: bass.notes,
     judge,
     lookahead: 4,
     loop,
@@ -509,22 +536,10 @@ function frame(now: number): void {
   }
   const t = transport.time;
 
-  // Release ended notes before starting new ones, and only when no newer note of the same
-  // pitch has taken over; otherwise back-to-back repeats would cut each other off.
-  for (const [id, n] of sounding) {
-    if (n.time + n.duration > t) continue;
-    sounding.delete(id);
-    if (![...sounding.values()].some(o => o.note === n.note)) sink.noteOff(n.note);
-  }
-  // In wait mode notes sound when they're played right (see midi.onNoteOn), not on arrival.
-  const sound = ui.sound.checked && transport.playing && !waitMode;
-  while (nextIdx < notes.length && notes[nextIdx].time <= t) {
-    const n = notes[nextIdx++];
-    if (sound) {
-      sink.noteOn(n.note, n.velocity);
-      sounding.set(n.id, n);
-    }
-  }
+  // In wait mode right-hand notes sound when they're played right (see judgePress), not on
+  // arrival. The bass isn't judged, so it plays along either way.
+  treble.update(sink, t, ui.sound.checked && transport.playing && !waitMode);
+  bass.update(sink, t, ui.bassSound.checked && transport.playing);
   if (!waitMode && transport.playing) judge.update(t, transport.rate);
 
   drawStage();
@@ -546,7 +561,7 @@ if (import.meta.env.DEV) {
       release: (note: number, channel = 1) => midi.simulate(note, false, channel),
       transport,
       judge: () => judge,
-      sounding: () => [...sounding.values()].map(n => n.note),
+      sounding: () => ({ treble: treble.soundingNotes, bass: bass.soundingNotes }),
     },
   });
 }

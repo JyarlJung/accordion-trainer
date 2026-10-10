@@ -25,9 +25,10 @@ export function drawBass(ctx: CanvasRenderingContext2D, geo: Geometry, layout: B
   }
 }
 
-// Bellows pressure (CC11) drawn as a bar in the gap between the two boards.
+// Bellows pressure (CC11) drawn as a bar in the gap between the two boards, as wide as the bass
+// board so the part panels beside it can use the height.
 export function drawBellows(ctx: CanvasRenderingContext2D, geo: Geometry, pressure: number): void {
-  const x = geo.left, w = geo.right - geo.left, y = geo.meterY, h = geo.meterH;
+  const x = geo.bassBox.left, w = geo.bassBox.right - x, y = geo.meterY, h = geo.meterH;
   ctx.fillStyle = 'rgba(255,255,255,0.05)';
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, h / 2);

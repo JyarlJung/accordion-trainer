@@ -46,6 +46,7 @@ export class Geometry {
   readonly meterH: number;
   readonly bassX0: number;
   readonly bassRowsTop: number;
+  readonly bassBox: { left: number; right: number; top: number; bottom: number }; // outer edges of the bass buttons
   readonly rhOrder: number[]; // treble row numbers from top to bottom
   readonly bassOrder: number[]; // bass row indices from top to bottom
   private readonly rhX0: number;
@@ -119,6 +120,13 @@ export class Geometry {
     const extent = Math.max(...xs) - Math.min(...xs) + this.lane;
     this.rhX0 = this.left + (availW - extent) / 2 + this.lane / 2 - Math.min(...xs);
     this.bassX0 = this.left + (availW - bassSpan * this.bassPitch) / 2 + this.bassPitch / 2;
+    // Centred, so mirroring left-right leaves it in place.
+    this.bassBox = {
+      left: this.bassX0 - this.bassRadius,
+      right: this.bassX0 + (bassSpan - 1) * this.bassPitch + this.bassRadius,
+      top: this.bassRowsTop,
+      bottom: this.bassRowsTop + (this.bassRows - 1) * this.bassRowGap + this.bassRadius * 2,
+    };
   }
 
   // Mirrors x around the board area's centre when flipped left-right.

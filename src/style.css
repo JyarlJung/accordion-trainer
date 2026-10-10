@@ -69,7 +69,26 @@ button.active { outline: 2px solid #ffd54f; }
 #rate, #volume, #rowGap, #hitWindow { width: 90px; }
 #midiIn, #output { max-width: 180px; }
 
-main { flex: 1; min-height: 0; }
+main { flex: 1; min-height: 0; position: relative; }
+
+/* Part panels beside the bass board; main.ts sets their box from the board layout. */
+.part {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: rgba(31, 31, 38, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  overflow: hidden;
+}
+.part-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.part select { padding: 1px 4px; }
+.part .tracks { flex: 1; min-height: 0; overflow-y: auto; flex-direction: column; flex-wrap: nowrap; gap: 2px; }
+.part .tracks label { white-space: normal; }
+.part .tracks:empty::before { content: 'MIDI를 열면 트랙이 나옵니다'; color: var(--muted); }
 canvas { display: block; width: 100%; height: 100%; }
 
 body.dragging main { outline: 3px dashed var(--accent); outline-offset: -8px; }

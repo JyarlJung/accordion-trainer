@@ -36,9 +36,6 @@
       <div id="settings" class="bar" hidden>
         <label>음색 <select id="output"></select></label>
         <label>입력 <select id="midiIn"></select></label>
-        <label>채널 오른손 <select id="chRight"></select></label>
-        <label>베이스 <select id="chBass"></select></label>
-        <label>코드 <select id="chChord"></select></label>
         <span id="lastCh" class="muted"></span>
         <label title="악기의 Ext Seq(아코디언)를 켜 둔 경우, 직접 누른 오른손 연주를 악기로 되돌려 소리 나게 합니다"><input type="checkbox" id="thru" checked /> 내 연주 되돌리기</label>
         <span class="sep"></span>
@@ -51,13 +48,9 @@
         <div class="bar">
           <label class="btn">MIDI 열기<input type="file" id="file" accept=".mid,.midi" hidden /></label>
           <span id="songName"></span>
-          <span id="tracks" class="tracks"></span>
-          <label>분할 <select id="split"></select></label>
-          <label><input type="checkbox" id="topLine" /> 최고음만</label>
-          <label><input type="checkbox" id="fit" checked /> 음역 맞춤</label>
+          <label title="이 음 이상은 오른손, 아래는 베이스로 나눕니다 (두 파트가 같은 트랙을 쓸 때)">분할 <select id="split"></select></label>
           <label>조옮김 <select id="transpose"></select></label>
           <span class="sep"></span>
-          <label><input type="checkbox" id="sound" checked /> 곡 소리</label>
           <label><input type="checkbox" id="helpers" checked /> 4·5열</label>
           <label><input type="checkbox" id="fitRange" /> 곡 음역만</label>
           <label><input type="checkbox" id="upcoming" checked /> 다음 버튼</label>
@@ -68,7 +61,31 @@
         </div>
       </div>
     </header>
-    <main><canvas id="stage"></canvas></main>
+    <main>
+      <canvas id="stage"></canvas>
+      <section id="treblePanel" class="part">
+        <div class="part-row">
+          <b>오른손</b>
+          <label><input type="checkbox" id="sound" checked /> 소리</label>
+          <label title="악기 입력과 MIDI 출력에 쓰는 채널">ch <select id="chRight"></select></label>
+        </div>
+        <div id="trebleTracks" class="tracks"></div>
+        <div class="part-row">
+          <label><input type="checkbox" id="topLine" /> 최고음만</label>
+          <label><input type="checkbox" id="fit" checked /> 음역 맞춤</label>
+        </div>
+      </section>
+      <section id="bassPanel" class="part">
+        <div class="part-row">
+          <b>베이스</b>
+          <label><input type="checkbox" id="bassSound" checked /> 소리</label>
+          <label title="악기 입력과 MIDI 출력에 쓰는 채널">ch <select id="chBass"></select></label>
+          <label title="악기가 코드 버튼을 보내는 채널">코드 ch <select id="chChord"></select></label>
+        </div>
+        <div id="bassTracks" class="tracks"></div>
+        <div class="part-row muted">가장 낮은 음만 · 판정 없음</div>
+      </section>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

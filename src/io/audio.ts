@@ -6,9 +6,11 @@ export function setVolume(v: number): void {
   Tone.getDestination().volume.value = v <= 0 ? -Infinity : Tone.gainToDb(v);
 }
 
+// `channel` (1..16) is the part's MIDI channel: a MIDI output sends on it, and the sampler keeps
+// each channel's voices apart so the same pitch in two parts doesn't cut itself off.
 export interface NoteSink {
-  noteOn(note: number, velocity: number): void;
-  noteOff(note: number): void;
+  noteOn(note: number, velocity: number, channel: number): void;
+  noteOff(note: number, channel: number): void;
   allOff(): void;
 }
 
@@ -32,6 +34,7 @@ export class SynthSink implements NoteSink {
     }).connect(filter);
   }
 
+  // One shared voice per pitch, whatever the channel.
   noteOn(note: number, velocity: number): void {
     this.synth?.triggerAttack(Tone.Frequency(note, 'midi').toFrequency(), Tone.now(), velocity);
   }
@@ -106,7 +109,7 @@ function makeSample(root: number, buffer: Tone.ToneAudioBuffer, loop: [number, n
 // instead play samples once (natural decay) and/or cap how long a held note lasts.
 export class SamplerSink implements NoteSink {
   private samples: Sample[] = [];
-  private readonly voices = new Map<number, Voice>();
+  private readonly voices = new Map<number, Voice>(); // by channel * 128 + note
   private out: Tone.Gain | null = null;
   private set: SampleSet | null = null;
 
@@ -125,11 +128,12 @@ export class SamplerSink implements NoteSink {
     return Tone.start();
   }
 
-  noteOn(note: number, velocity: number): void {
+  noteOn(note: number, velocity: number, channel: number): void {
     if (this.samples.length === 0) return;
+    const key = channel * 128 + note;
     // Re-striking a sounding pitch: cut the old voice fast and leave a short gap so the repeat is audible.
-    const retrigger = this.voices.has(note) ? RETRIGGER_GAP : 0;
-    this.release(note, retrigger || (this.set?.release ?? 0.12));
+    const retrigger = this.voices.has(key) ? RETRIGGER_GAP : 0;
+    this.release(key, retrigger || (this.set?.release ?? 0.12));
     this.out ??= new Tone.Gain(0.8).toDestination();
     const s = this.samples.reduce((a, b) => (Math.abs(b.root - note) < Math.abs(a.root - note) ? b : a));
     const src = new Tone.ToneBufferSource(s.loop
@@ -145,7 +149,7 @@ export class SamplerSink implements NoteSink {
     // A voice can end by itself (sample played out, or maxHold reached) before its key is released.
     src.onended = () => {
       voice.ended = true;
-      if (this.voices.get(note) === voice) this.voices.delete(note);
+      if (this.voices.get(key) === voice) this.voices.delete(key);
       src.dispose();
       gain.dispose();
     };
@@ -154,17 +158,17 @@ export class SamplerSink implements NoteSink {
       gain.gain.setValueAtTime(velocity, start + hold).linearRampToValueAtTime(0, start + hold + HOLD_FADE);
       src.stop(start + hold + HOLD_FADE);
     }
-    this.voices.set(note, voice);
+    this.voices.set(key, voice);
   }
 
-  noteOff(note: number): void {
-    this.release(note, this.set?.release ?? 0.12);
+  noteOff(note: number, channel: number): void {
+    this.release(channel * 128 + note, this.set?.release ?? 0.12);
   }
 
-  private release(note: number, rel: number): void {
-    const v = this.voices.get(note);
+  private release(key: number, rel: number): void {
+    const v = this.voices.get(key);
     if (!v) return;
-    this.voices.delete(note);
+    this.voices.delete(key);
     if (v.ended) return;
     const now = Tone.now();
     v.gain.gain.cancelScheduledValues(now).setValueAtTime(v.gain.gain.value, now).linearRampToValueAtTime(0, now + rel);
@@ -172,26 +176,30 @@ export class SamplerSink implements NoteSink {
   }
 
   allOff(): void {
-    for (const note of [...this.voices.keys()]) this.noteOff(note);
+    for (const key of [...this.voices.keys()]) this.release(key, this.set?.release ?? 0.12);
   }
 }
 
-// Sends the song to a MIDI output (e.g. back to the accordion to use its own sound).
+// Sends the song to a MIDI output (e.g. back to the accordion to use its own sound), each part on
+// its own channel.
 // V-Accordion reed sounds take their loudness from the bellows (CC11 Expression), so a note
 // arriving with no bellows value is silent. With soft thru on, the player's own bellows (echoed
 // back) is the only bellows source; mixing in a second one made the volume jump. Without thru,
 // the sink sends a fixed level from the volume slider so a listen-only setup still sounds.
 export class MidiOutSink implements NoteSink {
-  private readonly on = new Set<number>();
+  private readonly on = new Set<number>(); // channel * 128 + note
+  private readonly channels: Set<number>;
 
-  constructor(private readonly io: MidiIO, private readonly channel: number, private level: number) {}
+  constructor(private readonly io: MidiIO, private level: number, channels: number[]) {
+    this.channels = new Set(channels);
+  }
 
-  // Bellows level, 0..1 (follows the volume slider). Resent before playing in case the
-  // instrument was reset in between.
+  // Bellows level, 0..1 (follows the volume slider), on every channel in use. Resent before
+  // playing in case the instrument was reset in between.
   setLevel(level: number): void {
     this.level = level;
     if (this.playerBellows()) return;
-    this.io.send([0xb0 | (this.channel - 1), 11, Math.round(level * 127)]);
+    for (const ch of this.channels) this.io.send([0xb0 | (ch - 1), 11, Math.round(level * 127)]);
   }
 
   prime(): void {
@@ -202,20 +210,23 @@ export class MidiOutSink implements NoteSink {
     return this.io.thru;
   }
 
-  noteOn(note: number, velocity: number): void {
+  noteOn(note: number, velocity: number, channel: number): void {
+    this.channels.add(channel);
     this.prime();
-    this.io.send([0x90 | (this.channel - 1), note, Math.max(1, Math.round(velocity * 127))]);
-    this.on.add(note);
+    this.io.send([0x90 | (channel - 1), note, Math.max(1, Math.round(velocity * 127))]);
+    this.on.add(channel * 128 + note);
   }
 
-  noteOff(note: number): void {
-    this.io.send([0x80 | (this.channel - 1), note, 0]);
-    this.on.delete(note);
+  noteOff(note: number, channel: number): void {
+    this.io.send([0x80 | (channel - 1), note, 0]);
+    this.on.delete(channel * 128 + note);
   }
 
   allOff(): void {
-    for (const note of this.on) this.noteOff(note);
-    this.io.send([0xb0 | (this.channel - 1), 123, 0]); // All Notes Off
-    this.io.send([0xb0 | (this.channel - 1), 120, 0]); // All Sound Off
+    for (const key of this.on) this.noteOff(key % 128, key >> 7);
+    for (const ch of this.channels) {
+      this.io.send([0xb0 | (ch - 1), 123, 0]); // All Notes Off
+      this.io.send([0xb0 | (ch - 1), 120, 0]); // All Sound Off
+    }
   }
 }

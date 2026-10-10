@@ -1,7 +1,7 @@
 {
   "name": "accordion-trainer",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "MIT",
   "type": "module",
   "main": "electron/main.js",
@@ -15,8 +15,14 @@
   "build": {
     "appId": "local.accordion-trainer",
     "productName": "Accordion Trainer",
-    "files": ["dist/**", "electron/**", "package.json"],
-    "directories": { "output": "release" }
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    }
   },
   "devDependencies": {
     "@tonejs/midi": "^2.0.28",

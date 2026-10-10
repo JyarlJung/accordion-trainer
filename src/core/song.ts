@@ -20,7 +20,6 @@ export interface TrackInfo {
   noteCount: number;
   minNote: number;
   maxNote: number;
-  avgNote: number;
 }
 
 export interface Song {
@@ -34,8 +33,9 @@ export interface Song {
 }
 
 export interface ExtractOptions {
-  tracks: number[];
-  splitNote: number | null; // keep notes >= splitNote
+  tracks: number[]; // right hand
+  bassTracks: number[];
+  splitNote: number | null; // the right hand keeps notes >= splitNote, the bass the ones below
   topLineOnly: boolean;
   fitToRange: boolean;
   transpose: number; // semitones, applied before fitting to the range
@@ -49,13 +49,12 @@ export function sortNotes<T extends RawNote>(notes: T[]): T[] {
 }
 
 export function trackInfo(index: number, name: string, channel: number, notes: RawNote[]): TrackInfo {
-  let min = 127, max = 0, sum = 0;
+  let min = 127, max = 0;
   for (const n of notes) {
     min = Math.min(min, n.note);
     max = Math.max(max, n.note);
-    sum += n.note;
   }
-  return { index, name, channel, noteCount: notes.length, minNote: min, maxNote: max, avgNote: sum / notes.length };
+  return { index, name, channel, noteCount: notes.length, minNote: min, maxNote: max };
 }
 
 export function parseSong(data: ArrayBuffer, name: string): Song {
@@ -115,35 +114,49 @@ function beatGrid(midi: Midi): { bars: number[]; beats: number[] } {
   return { bars, beats };
 }
 
-const RIGHT_HAND_NAME = /right|\br\.?h\b|treble|melody|오른/i;
+// Tracks start unassigned: the player picks each part's tracks. A single track usually holds
+// both hands, so it gets a split at middle C in case it's picked for both parts.
+export function defaultOptions(song: Song): ExtractOptions {
+  return {
+    tracks: [], bassTracks: [], splitNote: song.tracks.length === 1 ? 60 : null,
+    topLineOnly: false, fitToRange: true, transpose: 0,
+  };
+}
 
-export function guessOptions(song: Song): ExtractOptions {
-  const base = { topLineOnly: false, fitToRange: true, transpose: 0 };
-  if (song.tracks.length === 0) return { ...base, tracks: [], splitNote: null };
-  // One track usually means both hands are merged; split at middle C.
-  if (song.tracks.length === 1) return { ...base, tracks: [song.tracks[0].index], splitNote: 60 };
-  const named = song.tracks.find(t => RIGHT_HAND_NAME.test(t.name));
-  const pick = named ?? [...song.tracks].sort((a, b) => b.avgNote - a.avgNote)[0];
-  return { ...base, tracks: [pick.index], splitNote: null };
+// Groups of notes starting together, each sorted from low to high.
+function onsetGroups(notes: RawNote[]): RawNote[][] {
+  const groups: RawNote[][] = [];
+  let groupTime = -Infinity;
+  for (const n of notes) {
+    if (n.time - groupTime < CHORD_EPS) {
+      groups[groups.length - 1].push(n);
+    } else {
+      groups.push([n]);
+      groupTime = n.time;
+    }
+  }
+  for (const g of groups) g.sort((a, b) => a.note - b.note);
+  return groups;
+}
+
+const BASS_GAP = 7; // semitones: a note this far below the rest of its group is a bass note
+
+// The bass part. Only the single-note bass rows are used so far, so chords are left out: each
+// onset keeps its lowest note if it sounds alone or stands a fifth or more below the rest
+// (bass under a chord); close clusters (the "pah" of an oom-pah) are chord-button presses.
+// Any octave fits, since the buttons only know the pitch class.
+export function extractBass(song: Song, opts: ExtractOptions): SongNote[] {
+  const selected = new Set(opts.bassTracks);
+  const picked = song.notes.filter(n => selected.has(n.track) && (opts.splitNote === null || n.note < opts.splitNote));
+  return onsetGroups(picked)
+    .filter(g => g.length === 1 || g[1].note - g[0].note >= BASS_GAP)
+    .map((g, id) => ({ ...g[0], note: g[0].note + opts.transpose, srcNote: g[0].note, id }));
 }
 
 export function extractNotes(song: Song, opts: ExtractOptions, range: { min: number; max: number }): SongNote[] {
   const selected = new Set(opts.tracks);
   let picked = song.notes.filter(n => selected.has(n.track) && (opts.splitNote === null || n.note >= opts.splitNote));
-
-  if (opts.topLineOnly) {
-    const top: RawNote[] = [];
-    let groupTime = -Infinity;
-    for (const n of picked) {
-      if (n.time - groupTime < CHORD_EPS) {
-        if (n.note > top[top.length - 1].note) top[top.length - 1] = n;
-      } else {
-        top.push(n);
-        groupTime = n.time;
-      }
-    }
-    picked = top;
-  }
+  if (opts.topLineOnly) picked = onsetGroups(picked).map(g => g[g.length - 1]);
 
   const result: SongNote[] = [];
   const seen = new Set<string>();
