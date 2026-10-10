@@ -194,9 +194,11 @@ export class Geometry {
     return { x: this.fx(this.rhX0 + b.y * this.pitch), y: this.rowLineY(b.row) };
   }
 
+  // The bass board is drawn mirrored within its box, so moving down the instrument's columns
+  // (C to F, fourths up) moves left on screen, the same way round as the hand.
   bassPos(b: BassButton): { x: number; y: number } {
     // Rows further from the bellows are shifted along the board, following its slant.
-    const x = this.bassX0 + (b.col + (this.bassRows - 1 - b.rowIndex) * this.bassSlant) * this.bassPitch;
-    return { x: this.fx(x), y: this.bassLineY(b.rowIndex) };
+    const x = this.fx(this.bassX0 + (b.col + (this.bassRows - 1 - b.rowIndex) * this.bassSlant) * this.bassPitch);
+    return { x: this.bassBox.left + this.bassBox.right - x, y: this.bassLineY(b.rowIndex) };
   }
 }

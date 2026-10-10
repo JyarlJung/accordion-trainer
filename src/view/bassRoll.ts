@@ -15,7 +15,8 @@ export function drawBassRoll(ctx: CanvasRenderingContext2D, geo: Geometry, bass:
   const top = box.top, land = box.bottom - LABEL_H;
   if (w <= 0 || land <= top) return;
   const lanes = s.bassChromatic ? [...Array(12).keys()] : bass.laneOrder();
-  if (geo.flipX) lanes.reverse();
+  // The board's order runs right to left like the (mirrored) board; semitones run left to right.
+  if (s.bassChromatic ? geo.flipX : !geo.flipX) lanes.reverse();
   const laneW = w / lanes.length;
   const laneOf = new Map(lanes.map((pc, i) => [pc, i]));
   const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;

@@ -1,6 +1,11 @@
 import * as Tone from 'tone';
 import type { MidiIO } from './midi';
 
+// Tone schedules everything `lookAhead` (0.1 s by default) after the current time, which made
+// every note sound 100 ms late. Notes here are started from the frame loop or from input, never
+// planned ahead, so start them right away.
+Tone.getContext().lookAhead = 0;
+
 // `channel` (1..16) is the part's MIDI channel: a MIDI output sends on it, and the sampler keeps
 // each channel's voices apart so the same pitch in two parts doesn't cut itself off.
 export interface NoteSink {

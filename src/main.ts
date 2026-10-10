@@ -3,18 +3,18 @@ import layoutJson from '../layouts/fr4xb-c-griff-europe.json';
 import bassJson from '../layouts/fr4xb-stradella-2row.json';
 import { BassLayout, type BassLayoutDef } from './core/bassLayout';
 import { Layout, noteName, type LayoutDef } from './core/layout';
-import { defaultOptions, extractBass, extractNotes, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
+import { defaultOptions, extractBass, extractNotes, nearestNoteTime, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode } from './core/practice';
-import { MidiIO } from './io/midi';
+import { MidiIO, type Part } from './io/midi';
 import { BUILTIN_SETS, type SampleSet } from './io/audio';
 import { PartPlayer } from './io/player';
 import { userSampleSets } from './io/sampleSets';
 import { PartVoice } from './io/voice';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
 import type { Geometry } from './view/geometry';
-import { BeatMeter, nearestBeat } from './view/beatMeter';
+import { BeatMeter } from './view/beatMeter';
 import { Stage } from './view/stage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -497,18 +497,24 @@ for (const [el, key] of [[ui.sound, 'sound'], [ui.bassSound, 'bassSound'], [ui.h
 }
 
 midi.onNoteOff = () => drawStage();
-// How far each press lands from the nearest beat, after the delay compensation, in real ms.
-// Only while the song is running: a waiting clock has no beat to measure against.
+// How early or late each press lands against the song note it plays, after the delay
+// compensation, in real ms: the right hand against notes of that pitch, bass and chord buttons
+// against bass notes and chord tones of that pitch class. A press with no such note nearby is a
+// wrong note and isn't measured; neither is one while the clock waits.
+const MATCH_MS = 250;
 const beatMeter = new BeatMeter($('beatMeter'));
-function measureBeat(): void {
+function measurePress(part: Part, note: number): void {
   if (!song || !transport.playing || transport.waiting) return;
   const played = transport.time - latency() * transport.rate;
-  const beat = nearestBeat(song.beats, played);
-  if (beat !== null) beatMeter.push(((played - beat) / transport.rate) * 1000);
+  const within = (MATCH_MS / 1000) * transport.rate;
+  const at = part === 'right'
+    ? nearestNoteTime(treble.notes, played, within, n => n.note === note)
+    : nearestNoteTime(bass.notes, played, within, n => n.chord === (part === 'chord') && (n.note - note) % 12 === 0);
+  if (at !== null) beatMeter.push(((played - at) / transport.rate) * 1000);
 }
 
 midi.onNoteOn = (part, note) => {
-  measureBeat();
+  measurePress(part, note);
   if (part === 'right') judgePress(note);
   drawStage();
 };

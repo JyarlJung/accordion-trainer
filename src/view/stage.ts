@@ -137,7 +137,14 @@ export class Stage {
       now.push(n);
       if (n.chord) continue;
       expected.add(n.note % 12);
-      for (const b of this.bass.mainButtons(n.note)) mark(b, heldPcs.has(n.note % 12), n.time);
+      // The two main buttons are filled; the other buttons with the same note (the board repeats
+      // its end columns) get an orange ring, like the treble's duplicate rows.
+      const held = heldPcs.has(n.note % 12);
+      const main = this.bass.mainButtons(n.note);
+      for (const b of main) mark(b, held, n.time);
+      for (const b of this.bass.forBassNote(n.note)) {
+        if (!main.includes(b)) set(b.id, held ? { fill: HIT } : { ring: DUPLICATE });
+      }
     }
     const chord = chordOf(now);
     if (chord) mark(chord, heldChord?.id === chord.id, Math.max(...now.filter(n => n.chord).map(n => n.time)));

@@ -245,6 +245,15 @@ export function extractNotes(song: Song, opts: ExtractOptions, range: Range): So
   return result;
 }
 
+// Start time of the note nearest t (within `within` seconds) that `match` accepts, or null.
+export function nearestNoteTime<T extends RawNote>(notes: T[], t: number, within: number, match: (n: T) => boolean): number | null {
+  let best: number | null = null;
+  for (let i = lowerBound(notes, t - within); i < notes.length && notes[i].time <= t + within; i++) {
+    if (match(notes[i]) && (best === null || Math.abs(notes[i].time - t) < Math.abs(best - t))) best = notes[i].time;
+  }
+  return best;
+}
+
 // First index whose time >= t.
 export function lowerBound(notes: RawNote[], t: number): number {
   let lo = 0, hi = notes.length;
