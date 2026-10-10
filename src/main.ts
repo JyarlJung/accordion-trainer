@@ -8,7 +8,7 @@ import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode } from './core/practice';
 import { MidiIO } from './io/midi';
-import { BUILTIN_SETS, setVolume, type SampleSet } from './io/audio';
+import { BUILTIN_SETS, type SampleSet } from './io/audio';
 import { PartPlayer } from './io/player';
 import { userSampleSets } from './io/sampleSets';
 import { PartVoice } from './io/voice';
@@ -59,6 +59,8 @@ const ui = {
   thru: $<HTMLInputElement>('thru'),
   volume: $<HTMLInputElement>('volume'),
   volumeLabel: $('volumeLabel'),
+  bassVolume: $<HTMLInputElement>('bassVolume'),
+  bassVolumeLabel: $('bassVolumeLabel'),
   rowGapLabel: $('rowGapLabel'),
 };
 
@@ -318,13 +320,18 @@ ui.loopB.onclick = () => {
   seek(loop.a, true);
 };
 ui.loopClear.onclick = clearLoop;
-function applyVolume(): void {
-  setVolume(Number(ui.volume.value));
-  trebleVoice.setLevel(Number(ui.volume.value));
-  bassVoice.setLevel(Number(ui.volume.value));
-  ui.volumeLabel.textContent = `${Math.round(Number(ui.volume.value) * 100)}%`;
+// Each part has its own volume.
+function volumeOf(voice: PartVoice): number {
+  return Number((voice === trebleVoice ? ui.volume : ui.bassVolume).value);
 }
-ui.volume.oninput = applyVolume;
+function applyVolumes(): void {
+  trebleVoice.setVolume(volumeOf(trebleVoice));
+  bassVoice.setVolume(volumeOf(bassVoice));
+  ui.volumeLabel.textContent = `${Math.round(volumeOf(trebleVoice) * 100)}%`;
+  ui.bassVolumeLabel.textContent = `${Math.round(volumeOf(bassVoice) * 100)}%`;
+}
+ui.volume.oninput = applyVolumes;
+ui.bassVolume.oninput = applyVolumes;
 // Hit window, ms on the slider, seconds in the judge.
 function hitWindow(): number {
   return Number(ui.hitWindow.value) / 1000;
@@ -442,7 +449,7 @@ ui.thru.onchange = applyThru;
 
 function selectVoice(voice: PartVoice, value: string): void {
   silence();
-  voice.choose(value, sampleSets, Number(ui.volume.value)).catch(e => {
+  voice.choose(value, sampleSets, volumeOf(voice)).catch(e => {
     const set = sampleSets.find(s => `set:${s.id}` === value);
     alert(`음색을 불러오지 못했습니다: ${set?.label ?? value}\n${e}`);
   });
@@ -463,7 +470,8 @@ ui.bassOutput.onchange = () => {
 };
 
 // Restore the remembered settings (song-specific options are left out on purpose).
-persist(ui.volume, 'volume', applyVolume);
+persist(ui.volume, 'volume', applyVolumes);
+persist(ui.bassVolume, 'bassVolume', applyVolumes);
 persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.mode, 'mode');

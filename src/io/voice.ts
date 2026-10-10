@@ -40,8 +40,10 @@ export class PartVoice {
     else if (this.sink instanceof MidiOutSink) this.sink.prime();
   }
 
-  // Bellows level on a MIDI output (the volume slider); the app's own sounds use the master volume.
-  setLevel(level: number): void {
-    if (this.sink instanceof MidiOutSink) this.sink.setLevel(level);
+  // The part's volume, 0..1: the app's own sounds, or the bellows level (CC11) on a MIDI output.
+  setVolume(v: number): void {
+    this.sampler.setVolume(v);
+    this.synth.setVolume(v);
+    if (this.sink instanceof MidiOutSink) this.sink.setLevel(v);
   }
 }

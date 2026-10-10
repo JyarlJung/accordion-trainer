@@ -1,11 +1,6 @@
 import * as Tone from 'tone';
 import type { MidiIO } from './midi';
 
-// Master volume for the app's own sounds (sampler and synth), 0..1.
-export function setVolume(v: number): void {
-  Tone.getDestination().volume.value = v <= 0 ? -Infinity : Tone.gainToDb(v);
-}
-
 // `channel` (1..16) is the part's MIDI channel: a MIDI output sends on it, and the sampler keeps
 // each channel's voices apart so the same pitch in two parts doesn't cut itself off.
 export interface NoteSink {
@@ -17,6 +12,13 @@ export interface NoteSink {
 // Simple reedy synth so the app makes sound without the instrument.
 export class SynthSink implements NoteSink {
   private synth: Tone.PolySynth | null = null;
+  private out: Tone.Gain | null = null;
+  private volume = 1;
+
+  setVolume(v: number): void {
+    this.volume = v;
+    if (this.out) this.out.gain.value = v;
+  }
 
   // Must be called from a user gesture. Not awaited by callers: the audio context may
   // resume a moment later, but the synth exists immediately.
@@ -26,7 +28,8 @@ export class SynthSink implements NoteSink {
   }
 
   private create(): void {
-    const filter = new Tone.Filter(2400, 'lowpass').toDestination();
+    this.out = new Tone.Gain(this.volume).toDestination();
+    const filter = new Tone.Filter(2400, 'lowpass').connect(this.out);
     this.synth = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'fatsawtooth', count: 2, spread: 14 },
       envelope: { attack: 0.02, decay: 0.1, sustain: 0.85, release: 0.12 },
@@ -56,6 +59,9 @@ export interface SampleSet {
   // Loop region as fractions of the sample length, so held notes sustain; false plays the
   // sample once, letting it fade out the way it was recorded.
   loop?: [number, number] | false;
+  loops?: Record<string, [number, number]>; // per-sample loop regions (fractions), used as given
+  stack?: number[]; // semitone offsets sounded together for each note, e.g. [0, 12] for octave reeds
+  crossfade?: number; // seconds blended across each loop's seam, so any loop points join smoothly
   maxHold?: number; // seconds a held note lasts before fading out on its own
   release?: number;
   part?: 'treble' | 'bass'; // which part picks this set by default
@@ -76,7 +82,7 @@ const RETRIGGER_GAP = 0.025; // seconds
 const HOLD_FADE = 0.3; // seconds, fade at the end of maxHold
 
 interface Voice {
-  src: Tone.ToneBufferSource;
+  srcs: Tone.ToneBufferSource[]; // one per stacked reed
   gain: Tone.Gain;
   ended: boolean;
 }
@@ -95,28 +101,54 @@ function snapToZero(data: Float32Array, i: number): number {
   return i;
 }
 
-function makeSample(root: number, buffer: Tone.ToneAudioBuffer, loop: [number, number] | false): Sample {
-  if (!loop) return { root, buffer, loop: null };
-  const data = buffer.getChannelData(0);
-  const rate = buffer.sampleRate;
-  const [ls, le] = loop;
-  return {
-    root, buffer,
-    loop: { start: snapToZero(data, Math.floor(data.length * ls)) / rate, end: snapToZero(data, Math.floor(data.length * le)) / rate },
-  };
+// A copy of the buffer whose loop end blends into the audio leading up to the loop start
+// (equal-power), so the jump back to the start continues the sound wherever the points fall.
+function crossfaded(buffer: Tone.ToneAudioBuffer, start: number, end: number, fade: number): Tone.ToneAudioBuffer {
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const src = buffer.getChannelData(c);
+    const out = new Float32Array(src);
+    for (let i = 0; i < fade; i++) {
+      const t = ((i + 1) / fade) * (Math.PI / 2);
+      out[end - fade + i] = src[end - fade + i] * Math.cos(t) + src[start - fade + i] * Math.sin(t);
+    }
+    channels.push(out);
+  }
+  return Tone.ToneAudioBuffer.fromArray(channels);
 }
 
-// Decoded samples by URL, shared when both parts use the same set.
-const buffers = new Map<string, Promise<Tone.ToneAudioBuffer>>();
+// `snap` moves the loop points onto zero crossings; loops set by a sample's author are kept as
+// they are. `crossfade` (seconds) smooths the seam.
+function makeSample(
+  root: number, buffer: Tone.ToneAudioBuffer, loop: [number, number] | false, snap: boolean, crossfade: number,
+): Sample {
+  if (!loop) return { root, buffer, loop: null };
+  const data = buffer.getChannelData(0);
+  const point = (f: number) => {
+    const i = Math.min(Math.floor(data.length * f), data.length);
+    return snap ? snapToZero(data, i) : i;
+  };
+  const start = point(loop[0]), end = point(loop[1]);
+  const fade = Math.min(Math.round(crossfade * buffer.sampleRate), start, Math.floor((end - start) / 2));
+  const out = fade > 0 ? crossfaded(buffer, start, end, fade) : buffer;
+  return { root, buffer: out, loop: { start: start / buffer.sampleRate, end: end / buffer.sampleRate } };
+}
 
-function loadBuffer(url: string): Promise<Tone.ToneAudioBuffer> {
-  let b = buffers.get(url);
-  if (!b) {
-    b = new Tone.ToneAudioBuffer().load(url);
-    b.catch(() => buffers.delete(url)); // let a failed load be retried
-    buffers.set(url, b);
+// Samples ready to play, by file and loop settings, shared when both parts use the same set.
+const prepared = new Map<string, Promise<Sample>>();
+
+function prepareSample(
+  url: string, root: number, loop: [number, number] | false, snap: boolean, crossfade: number,
+): Promise<Sample> {
+  url = new URL(url, location.href).href; // "set-b/../set-a/x.wav" is the same file as "set-a/x.wav"
+  const key = JSON.stringify([url, root, loop, snap, crossfade]);
+  let p = prepared.get(key);
+  if (!p) {
+    p = new Tone.ToneAudioBuffer().load(url).then(b => makeSample(root, b, loop, snap, crossfade));
+    p.catch(() => prepared.delete(key)); // let a failed load be retried
+    prepared.set(key, p);
   }
-  return b;
+  return p;
 }
 
 // Sample player. By default it loops the middle of each sample so held notes sustain; a set can
@@ -126,14 +158,22 @@ export class SamplerSink implements NoteSink {
   private readonly voices = new Map<number, Voice>(); // by channel * 128 + note
   private out: Tone.Gain | null = null;
   private set: SampleSet | null = null;
+  private volume = 1;
+
+  setVolume(v: number): void {
+    this.volume = v;
+    if (this.out) this.out.gain.value = 0.8 * v;
+  }
 
   async load(set: SampleSet): Promise<void> {
     this.allOff();
     this.set = set;
     this.samples = [];
     const loop = set.loop ?? [0.35, 0.8];
-    const loaded = await Promise.all(Object.entries(set.urls).map(async ([name, file]) =>
-      makeSample(Tone.Frequency(name).toMidi(), await loadBuffer(set.baseUrl + file), loop)));
+    const loaded = await Promise.all(Object.entries(set.urls).map(([name, file]) => {
+      const own = set.loops?.[name];
+      return prepareSample(set.baseUrl + file, Tone.Frequency(name).toMidi(), own ?? loop, !own, set.crossfade ?? 0);
+    }));
     // Ignore a stale load if another set was chosen meanwhile.
     if (this.set === set) this.samples = loaded;
   }
@@ -148,29 +188,39 @@ export class SamplerSink implements NoteSink {
     // Re-striking a sounding pitch: cut the old voice fast and leave a short gap so the repeat is audible.
     const retrigger = this.voices.has(key) ? RETRIGGER_GAP : 0;
     this.release(key, retrigger || (this.set?.release ?? 0.12));
-    this.out ??= new Tone.Gain(0.8).toDestination();
-    const s = this.samples.reduce((a, b) => (Math.abs(b.root - note) < Math.abs(a.root - note) ? b : a));
-    const src = new Tone.ToneBufferSource(s.loop
-      ? { url: s.buffer, loop: true, loopStart: s.loop.start, loopEnd: s.loop.end }
-      : { url: s.buffer });
-    src.playbackRate.value = 2 ** ((note - s.root) / 12);
+    this.out ??= new Tone.Gain(0.8 * this.volume).toDestination();
     const gain = new Tone.Gain(0).connect(this.out);
-    src.connect(gain);
     const start = Tone.now() + retrigger;
-    gain.gain.setValueAtTime(0, start).linearRampToValueAtTime(velocity, start + 0.01);
-    src.start(start);
-    const voice: Voice = { src, gain, ended: false };
-    // A voice can end by itself (sample played out, or maxHold reached) before its key is released.
-    src.onended = () => {
-      voice.ended = true;
-      if (this.voices.get(key) === voice) this.voices.delete(key);
-      src.dispose();
-      gain.dispose();
-    };
+    // Each stacked reed plays from the sample nearest its own pitch.
+    const srcs = (this.set?.stack ?? [0]).map(offset => {
+      const pitch = note + offset;
+      const s = this.samples.reduce((a, b) => (Math.abs(b.root - pitch) < Math.abs(a.root - pitch) ? b : a));
+      const src = new Tone.ToneBufferSource(s.loop
+        ? { url: s.buffer, loop: true, loopStart: s.loop.start, loopEnd: s.loop.end }
+        : { url: s.buffer });
+      src.playbackRate.value = 2 ** ((pitch - s.root) / 12);
+      src.connect(gain);
+      src.start(start);
+      return src;
+    });
+    const level = velocity / Math.sqrt(srcs.length); // keep a stack about as loud as one reed
+    gain.gain.setValueAtTime(0, start).linearRampToValueAtTime(level, start + 0.01);
+    const voice: Voice = { srcs, gain, ended: false };
+    // A voice can end by itself (samples played out, or maxHold reached) before its key is released.
+    let playing = srcs.length;
+    for (const src of srcs) {
+      src.onended = () => {
+        src.dispose();
+        if (--playing > 0) return;
+        voice.ended = true;
+        if (this.voices.get(key) === voice) this.voices.delete(key);
+        gain.dispose();
+      };
+    }
     const hold = this.set?.maxHold;
     if (hold) {
-      gain.gain.setValueAtTime(velocity, start + hold).linearRampToValueAtTime(0, start + hold + HOLD_FADE);
-      src.stop(start + hold + HOLD_FADE);
+      gain.gain.setValueAtTime(level, start + hold).linearRampToValueAtTime(0, start + hold + HOLD_FADE);
+      for (const src of srcs) src.stop(start + hold + HOLD_FADE);
     }
     this.voices.set(key, voice);
   }
@@ -186,7 +236,7 @@ export class SamplerSink implements NoteSink {
     if (v.ended) return;
     const now = Tone.now();
     v.gain.gain.cancelScheduledValues(now).setValueAtTime(v.gain.gain.value, now).linearRampToValueAtTime(0, now + rel);
-    v.src.stop(now + rel);
+    for (const src of v.srcs) src.stop(now + rel);
   }
 
   allOff(): void {
