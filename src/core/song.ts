@@ -10,7 +10,6 @@ export interface RawNote {
 
 export interface SongNote extends RawNote {
   id: number; // index into the extracted note list
-  srcNote: number; // pitch before octave fitting
 }
 
 export interface TrackInfo {
@@ -51,11 +50,11 @@ export interface ExtractOptions {
 // Notes starting within this window are treated as one chord.
 export const CHORD_EPS = 0.03;
 
-export function sortNotes<T extends RawNote>(notes: T[]): T[] {
+function sortNotes<T extends RawNote>(notes: T[]): T[] {
   return notes.sort((a, b) => a.time - b.time || b.note - a.note);
 }
 
-export function trackInfo(index: number, name: string, channel: number, notes: RawNote[]): TrackInfo {
+function trackInfo(index: number, name: string, channel: number, notes: RawNote[]): TrackInfo {
   let min = 127, max = 0;
   for (const n of notes) {
     min = Math.min(min, n.note);
@@ -222,7 +221,7 @@ export function extractBass(song: Song, opts: ExtractOptions, range: Range): Bas
       const key = `${chord}:${note % 12}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ ...n, note, srcNote: n.note, id: out.length, chord });
+      out.push({ ...n, note, id: out.length, chord });
     }
   }
   return out;
@@ -240,7 +239,7 @@ export function extractNotes(song: Song, opts: ExtractOptions, range: Range): So
     const key = `${note}@${Math.round(n.time * 1000)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    result.push({ ...n, note, srcNote: n.note, id: result.length });
+    result.push({ ...n, note, id: result.length });
   }
   return result;
 }

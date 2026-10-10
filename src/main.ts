@@ -59,7 +59,7 @@ const ui = {
   latency: $<HTMLInputElement>('latency'),
   latencyLabel: $('latencyLabel'),
   upcoming: $<HTMLInputElement>('upcoming'),
-  thru: $<HTMLInputElement>('thru'),
+  followInput: $<HTMLInputElement>('followInput'),
   volume: $<HTMLInputElement>('volume'),
   volumeLabel: $('volumeLabel'),
   bassVolume: $<HTMLInputElement>('bassVolume'),
@@ -68,6 +68,7 @@ const ui = {
 };
 
 const layout = new Layout(layoutJson as LayoutDef);
+const keyRange = { min: layout.minNote, max: layout.maxNote };
 const transport = new Transport();
 const midi = new MidiIO();
 const trebleVoice = new PartVoice(midi, () => [midi.channels.right]);
@@ -82,6 +83,7 @@ const treble = new PartPlayer(() => midi.channels.right);
 const bass = new PartPlayer<BassNote>(n => (n.chord ? midi.channels.chord : midi.channels.bass));
 let judge = new Judge([]);
 const waiter = new WaitMode();
+const inputHeld = new Set<number>(); // right-hand pitches sounding from the player's keys (see followInput)
 let loopStart: number | null = null;
 let loop: { a: number; b: number } | null = null;
 let songRange: { lo: number; hi: number } | null = null;
@@ -141,8 +143,8 @@ stage.onLayout = placePanels;
 
 function rebuild(t = transport.time): void {
   if (!song || !options) return;
-  treble.notes = extractNotes(song, options, { min: layout.minNote, max: layout.maxNote });
-  bass.notes = extractBass(song, options, { min: layout.minNote, max: layout.maxNote });
+  treble.notes = extractNotes(song, options, keyRange);
+  bass.notes = extractBass(song, options, keyRange);
   songRange = rangeFor(treble.notes);
   judge = new Judge(treble.notes, n => layout.primary(n) !== undefined);
   judge.windowSec = hitWindow();
@@ -160,6 +162,7 @@ function seek(t: number, resetStats = false): void {
 }
 
 function silence(): void {
+  inputHeld.clear();
   trebleVoice.sink.allOff();
   bassVoice.sink.allOff();
   treble.stop();
@@ -224,6 +227,12 @@ ui.transpose.onchange = () => {
   options.transpose = Number(ui.transpose.value);
   rebuild();
 };
+ui.fit.onchange = () => {
+  if (!options) return;
+  options.fitToRange = ui.fit.checked;
+  rebuild();
+};
+
 $<HTMLButtonElement>('resetPrefs').onclick = () => {
   if (!confirm('저장된 설정을 모두 지우고 기본값으로 다시 시작할까요?')) return;
   resetPrefs();
@@ -232,11 +241,6 @@ $<HTMLButtonElement>('resetPrefs').onclick = () => {
 ui.settingsBtn.onclick = () => {
   ui.settings.hidden = !ui.settings.hidden;
   ui.settingsBtn.classList.toggle('active', !ui.settings.hidden);
-};
-ui.fit.onchange = () => {
-  if (!options) return;
-  options.fitToRange = ui.fit.checked;
-  rebuild();
 };
 
 ui.file.onchange = () => {
@@ -454,21 +458,12 @@ function fillVoices(select: HTMLSelectElement, key: string, voice: PartVoice, pa
   if (voice.value !== null && select.value !== voice.value) selectVoice(voice, select.value);
 }
 
-// Soft thru echoes the right hand to the right hand's MIDI output, so it only makes sense
-// while that part plays on one.
-function applyThru(): void {
-  midi.selectOutput(trebleVoice.midiPort);
-  midi.thru = ui.thru.checked && trebleVoice.midiPort !== null;
-}
-ui.thru.onchange = applyThru;
-
 function selectVoice(voice: PartVoice, value: string): void {
   silence();
   voice.choose(value, sampleSets, volumeOf(voice)).catch(e => {
     const set = sampleSets.find(s => `set:${s.id}` === value);
     alert(`음색을 불러오지 못했습니다: ${set?.label ?? value}\n${e}`);
   });
-  applyThru();
 }
 
 ui.midiIn.onchange = () => {
@@ -492,11 +487,28 @@ persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.latency, 'latency', applyLatency);
 persist(ui.mode, 'mode');
 persist(ui.loopUnit, 'loopUnit');
-for (const [el, key] of [[ui.sound, 'sound'], [ui.bassSound, 'bassSound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.thru, 'thru'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
+for (const [el, key] of [[ui.sound, 'sound'], [ui.bassSound, 'bassSound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
   persist(el, key);
 }
 
-midi.onNoteOff = () => drawStage();
+// "Play by my keys" (wait mode, right hand): the sound follows the player's keys instead of the
+// written notes. A note still starts on arrival, to cover the input delay, and holds through its
+// hit window; a press that hits it takes it over (or starts it, if it hasn't arrived yet), and
+// any other press sounds as played. Either way it stops when the key is released.
+function followInput(): boolean {
+  return ui.mode.value === 'wait' && ui.followInput.checked;
+}
+treble.endOf = n => {
+  const written = n.time + n.duration;
+  if (!followInput() || judge.state[n.id] !== 'pending') return written;
+  return Math.max(written, n.time + (judge.windowSec + latency()) * transport.rate);
+};
+ui.followInput.addEventListener('change', silence);
+
+midi.onNoteOff = (part, note) => {
+  if (part === 'right' && inputHeld.delete(note)) trebleVoice.sink.noteOff(note, midi.channels.right);
+  drawStage();
+};
 // How early or late each press lands against the song note it plays, after the delay
 // compensation, in real ms: the right hand against notes of that pitch, bass and chord buttons
 // against bass notes and chord tones of that pitch class. A press with no such note nearby is a
@@ -513,19 +525,26 @@ function measurePress(part: Part, note: number): void {
   if (at !== null) beatMeter.push(((played - at) / transport.rate) * 1000);
 }
 
-midi.onNoteOn = (part, note) => {
+midi.onNoteOn = (part, note, velocity) => {
   measurePress(part, note);
-  if (part === 'right') judgePress(note);
+  if (part === 'right') judgePress(note, velocity);
   drawStage();
 };
 
-function judgePress(note: number): void {
+function judgePress(note: number, velocity: number): void {
   const waitMode = ui.mode.value === 'wait';
   const waited = transport.waiting;
   const result = waitMode
     ? pressInWaitMode(judge, transport, note, latency())
     : judge.onNoteOn(note, transport.time - latency() * transport.rate, transport.rate);
   stage.flash(note, result);
+  if (waitMode && ui.sound.checked && followInput()) {
+    startSound();
+    const taken = result === 'hit' && judge.lastHit !== null && treble.claim(judge.lastHit);
+    if (!taken) trebleVoice.sink.noteOn(note, velocity, midi.channels.right);
+    inputHeld.add(note);
+    return;
+  }
   // A chord the clock is waiting for stays quiet until it's played right, then each note sounds
   // for its written length. (Within the hit window notes already sound on arrival.)
   if (result === 'hit' && waitMode && waited && ui.sound.checked && judge.lastHit !== null) {

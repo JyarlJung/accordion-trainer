@@ -5,7 +5,6 @@ import type { Geometry } from './geometry';
 export interface Mark {
   fill?: string;
   ring?: string;
-  badge?: number; // order of an upcoming chord (1 = next)
   cross?: boolean;
   alpha?: number;
 }
@@ -50,18 +49,6 @@ export function drawButton(
   ctx.fillStyle = m?.fill ? '#fff' : style.text;
   ctx.font = `600 ${r * (style.fontScale ?? (label.length > 3 ? 0.46 : 0.56))}px system-ui, sans-serif`;
   ctx.fillText(label, x, y + 0.5);
-
-  if (m?.badge) {
-    const br = Math.max(r * 0.36, 7);
-    const bx = x + r * 0.72, by = y - r * 0.72;
-    ctx.beginPath();
-    ctx.arc(bx, by, br, 0, Math.PI * 2);
-    ctx.fillStyle = '#111';
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = `700 ${br * 1.3}px system-ui, sans-serif`;
-    ctx.fillText(String(m.badge), bx, by + 0.5);
-  }
 
   if (m?.cross) {
     const d = r * 0.6;

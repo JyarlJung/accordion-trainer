@@ -186,7 +186,7 @@ export class Stage {
       const fill = state === 'hit' ? HIT : state === 'missed' ? MISSED : EXPECT;
       // Briefly flash at each onset so a repeated note reads as a new press.
       const onset = t - n.time < ONSET_FLASH && state !== 'hit';
-      set(primary.id, { fill: onset ? ONSET : fill, ring: onset ? '#fff' : undefined, badge: undefined, alpha: 1 });
+      set(primary.id, { fill: onset ? ONSET : fill, ring: onset ? '#fff' : undefined, alpha: 1 });
       if (s.showHelpers) for (const d of dups) set(d.id, { ring: DUPLICATE, alpha: 1 });
     }
 
