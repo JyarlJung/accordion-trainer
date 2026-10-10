@@ -20,9 +20,22 @@ const BASS_LANES = 1.1; // bass button pitch in treble lanes: about treble-butto
 const BASS_ROW_GAP = 0.9;
 const BASS_MAX_WIDTH = 0.55; // cap the bass board at this share of the width, so zooming the treble doesn't inflate it
 const MAX_PITCH = 140;
+const BASS_LABEL = 14; // bass row titles, this far outside the bass board, px
+const SIDE_GAP = 32; // between the bass board and the area beside it (room for the row titles), px
+const TRACKS_W = 250; // track table, px
+const PANEL_GAP = 12;
+
+export interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
 
 // Top to bottom: falling notes, treble board, bellows meter, bass board. This is the
 // opened-up instrument turned on its side: both boards face the bellows in the middle.
+// The bass board sits at the right end; left of it are the track table and the bass part's own
+// roll (all swap sides when mirrored).
 // Treble buttons keep their real positions; each semitone gets a straight diagonal lane
 // that runs through its button, so notes fall onto their own button and row.
 export class Geometry {
@@ -46,7 +59,10 @@ export class Geometry {
   readonly meterH: number;
   readonly bassX0: number;
   readonly bassRowsTop: number;
-  readonly bassBox: { left: number; right: number; top: number; bottom: number }; // outer edges of the bass buttons
+  readonly bassBox: Box; // outer edges of the bass buttons
+  readonly bassLabelX: number; // bass row titles, beside the board on the panels' side
+  readonly tracksBox: Box; // the track table (an HTML overlay)
+  readonly bassRoll: Box; // the bass part's roll, beside the bass board
   readonly rhOrder: number[]; // treble row numbers from top to bottom
   readonly bassOrder: number[]; // bass row indices from top to bottom
   private readonly rhX0: number;
@@ -119,14 +135,24 @@ export class Geometry {
     const xs = [this.lo, this.hi].flatMap(n => [this.rollTop, this.lanesBottom].map(y => this.laneXFrom(0, n, y)));
     const extent = Math.max(...xs) - Math.min(...xs) + this.lane;
     this.rhX0 = this.left + (availW - extent) / 2 + this.lane / 2 - Math.min(...xs);
-    this.bassX0 = this.left + (availW - bassSpan * this.bassPitch) / 2 + this.bassPitch / 2;
-    // Centred, so mirroring left-right leaves it in place.
+    this.bassX0 = this.right - bassSpan * this.bassPitch + this.bassPitch / 2;
+
+    // Boxes in screen space (after mirroring).
+    const span = (a: number, b: number) => (opts.flipX ? { left: this.fx(b), right: this.fx(a) } : { left: a, right: b });
+    const bassLeft = this.bassX0 - this.bassRadius;
     this.bassBox = {
-      left: this.bassX0 - this.bassRadius,
-      right: this.bassX0 + (bassSpan - 1) * this.bassPitch + this.bassRadius,
+      ...span(bassLeft, this.bassX0 + (bassSpan - 1) * this.bassPitch + this.bassRadius),
       top: this.bassRowsTop,
       bottom: this.bassRowsTop + (this.bassRows - 1) * this.bassRowGap + this.bassRadius * 2,
     };
+    const side = { top: this.meterY, bottom: this.bassBox.bottom };
+    this.tracksBox = { ...span(this.left, this.left + TRACKS_W), ...side };
+    this.bassRoll = { ...span(this.left + TRACKS_W + PANEL_GAP, bassLeft - SIDE_GAP), ...side };
+    this.bassLabelX = opts.flipX ? this.bassBox.right + BASS_LABEL : this.bassBox.left - BASS_LABEL;
+  }
+
+  get flipX(): boolean {
+    return this.opts.flipX;
   }
 
   // Mirrors x around the board area's centre when flipped left-right.

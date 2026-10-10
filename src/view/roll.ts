@@ -1,12 +1,13 @@
 import { isBlack, type Layout } from '../core/layout';
 import type { Judge } from '../core/judge';
-import type { SongNote } from '../core/song';
+import type { BassNote, SongNote } from '../core/song';
 import { HELPER_ONLY, HIT, ROW_COLORS } from './colors';
 import type { Geometry } from './geometry';
 
 export interface RollState {
   time: number;
   notes: SongNote[];
+  bassNotes: BassNote[]; // the song's bass part (shown, never judged)
   judge: Judge;
   lookahead: number; // seconds of travel from the top to the highest judgment line
   loop: { a: number; b: number } | null;

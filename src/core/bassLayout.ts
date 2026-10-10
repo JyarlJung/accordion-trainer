@@ -21,6 +21,11 @@ export interface BassButton {
 
 const PC: Record<string, number> = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };
 const NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+// Name of a bass note's button, as printed on the board (the bass has no octaves).
+export function bassName(note: number): string {
+  return NAMES[((note % 12) + 12) % 12];
+}
+
 const SUFFIX: Record<ChordRow, string> = { major: 'M', minor: 'm', seventh: '7', dim: '°' };
 
 // Pitch-class shapes the instrument sends for each chord row, relative to the root.
@@ -65,6 +70,13 @@ export class BassLayout {
   mainButtons(note: number): BassButton[] {
     const all = this.forBassNote(note);
     return (['bass', 'counter'] as const).map(row => all.find(b => b.row === row)!);
+  }
+
+  // The twelve pitch classes in the board's column order: the twelve columns around C.
+  laneOrder(): number[] {
+    return this.buttons
+      .filter(b => b.row === 'bass' && b.col >= this.centerCol - 6 && b.col < this.centerCol + 6)
+      .map(b => b.root);
   }
 
   // Identifies one chord button from the held notes (any octave or inversion).

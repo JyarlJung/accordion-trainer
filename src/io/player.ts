@@ -2,12 +2,13 @@ import { lowerBound, type SongNote } from '../core/song';
 import type { NoteSink } from './audio';
 
 // Sounds one part of the song (right hand or bass) on its own channel as the clock passes it.
-export class PartPlayer {
-  notes: SongNote[] = [];
+export class PartPlayer<T extends SongNote = SongNote> {
+  notes: T[] = [];
   private next = 0; // next note the clock will reach
-  private readonly sounding = new Map<number, SongNote>();
+  private readonly sounding = new Map<number, T>();
 
-  constructor(private readonly channel: () => number) {}
+  // `channel` picks each note's MIDI channel (the bass part sends chord tones on their own).
+  constructor(private readonly channel: (n: T) => number) {}
 
   // Moves the read position to t.
   seek(t: number): void {
@@ -19,8 +20,8 @@ export class PartPlayer {
     this.sounding.clear();
   }
 
-  play(sink: NoteSink, n: SongNote): void {
-    sink.noteOn(n.note, n.velocity, this.channel());
+  play(sink: NoteSink, n: T): void {
+    sink.noteOn(n.note, n.velocity, this.channel(n));
     this.sounding.set(n.id, n);
   }
 
@@ -31,7 +32,8 @@ export class PartPlayer {
     for (const [id, n] of this.sounding) {
       if (n.time + n.duration > t) continue;
       this.sounding.delete(id);
-      if (![...this.sounding.values()].some(o => o.note === n.note)) sink.noteOff(n.note, this.channel());
+      const ch = this.channel(n);
+      if (![...this.sounding.values()].some(o => o.note === n.note && this.channel(o) === ch)) sink.noteOff(n.note, ch);
     }
     while (this.next < this.notes.length && this.notes[this.next].time <= t) {
       const n = this.notes[this.next++];

@@ -57,6 +57,21 @@ export function trackInfo(index: number, name: string, channel: number, notes: R
   return { index, name, channel, noteCount: notes.length, minNote: min, maxNote: max };
 }
 
+// MIDI text is raw bytes, which the parser maps one per character (Latin-1). Re-read them as
+// UTF-8, or failing that as CP949, which Korean MIDI tools often write.
+function decodeText(s: string): string {
+  if (!/[\u0080-\u00ff]/.test(s) || /[^\u0000-\u00ff]/.test(s)) return s;
+  const bytes = Uint8Array.from(s, c => c.charCodeAt(0));
+  for (const encoding of ['utf-8', 'euc-kr']) {
+    try {
+      return new TextDecoder(encoding, { fatal: true }).decode(bytes);
+    } catch {
+      // not this encoding
+    }
+  }
+  return s;
+}
+
 export function parseSong(data: ArrayBuffer, name: string): Song {
   const midi = new Midi(data);
   const tracks: TrackInfo[] = [];
@@ -65,7 +80,7 @@ export function parseSong(data: ArrayBuffer, name: string): Song {
     if (t.notes.length === 0) return;
     const own = t.notes.map(n => ({ note: n.midi, time: n.time, duration: n.duration, velocity: n.velocity, track: index }));
     notes.push(...own);
-    tracks.push(trackInfo(index, t.name.trim() || t.instrument.name || `트랙 ${index + 1}`, t.channel + 1, own));
+    tracks.push(trackInfo(index, decodeText(t.name).trim() || t.instrument.name || `트랙 ${index + 1}`, t.channel + 1, own));
   });
   return trimLeadIn({ name, duration: midi.duration, tracks, notes: sortNotes(notes), firstBar: 1, ...beatGrid(midi) });
 }
@@ -141,16 +156,32 @@ function onsetGroups(notes: RawNote[]): RawNote[][] {
 
 const BASS_GAP = 7; // semitones: a note this far below the rest of its group is a bass note
 
-// The bass part. Only the single-note bass rows are used so far, so chords are left out: each
-// onset keeps its lowest note if it sounds alone or stands a fifth or more below the rest
-// (bass under a chord); close clusters (the "pah" of an oom-pah) are chord-button presses.
-// Any octave fits, since the buttons only know the pitch class.
-export function extractBass(song: Song, opts: ExtractOptions): SongNote[] {
+// A note of the bass part: a bass note, or a tone of a chord button.
+export interface BassNote extends SongNote {
+  chord: boolean;
+}
+
+// The bass part, chords included. Each onset's lowest note is a bass note if it sounds alone or
+// stands a fifth or more below the rest (bass under a chord); the other notes are chord tones,
+// and close clusters (the "pah" of an oom-pah) are all chord tones. The bass side has no
+// octaves, so each pitch class appears once per role and onset.
+export function extractBass(song: Song, opts: ExtractOptions): BassNote[] {
   const selected = new Set(opts.bassTracks);
   const picked = song.notes.filter(n => selected.has(n.track) && (opts.splitNote === null || n.note < opts.splitNote));
-  return onsetGroups(picked)
-    .filter(g => g.length === 1 || g[1].note - g[0].note >= BASS_GAP)
-    .map((g, id) => ({ ...g[0], note: g[0].note + opts.transpose, srcNote: g[0].note, id }));
+  const out: BassNote[] = [];
+  for (const g of onsetGroups(picked)) {
+    const bass = g.length === 1 || g[1].note - g[0].note >= BASS_GAP ? g[0] : null;
+    const seen = new Set<string>();
+    for (const n of g) {
+      const note = n.note + opts.transpose;
+      const chord = n !== bass;
+      const key = `${chord}:${note % 12}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...n, note, srcNote: n.note, id: out.length, chord });
+    }
+  }
+  return out;
 }
 
 export function extractNotes(song: Song, opts: ExtractOptions, range: { min: number; max: number }): SongNote[] {

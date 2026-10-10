@@ -12,7 +12,7 @@ export function drawBass(ctx: CanvasRenderingContext2D, geo: Geometry, layout: B
 
   ctx.font = `600 ${Math.max(10, geo.radius * 0.5)}px system-ui, sans-serif`;
   ctx.fillStyle = '#9a9aa5';
-  layout.def.rows.forEach((row, i) => ctx.fillText(ROW_TITLES[row], geo.labelX, geo.bassLineY(i)));
+  layout.def.rows.forEach((row, i) => ctx.fillText(ROW_TITLES[row], geo.bassLabelX, geo.bassLineY(i)));
 
   for (const b of layout.buttons) {
     const { x, y } = geo.bassPos(b);
@@ -44,5 +44,5 @@ export function drawBellows(ctx: CanvasRenderingContext2D, geo: Geometry, pressu
   ctx.font = '11px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('압력', geo.labelX, y + h / 2);
+  ctx.fillText('압력', geo.bassLabelX, y + h / 2);
 }

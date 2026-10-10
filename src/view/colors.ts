@@ -4,6 +4,10 @@ export const ROW_COLORS: Record<number, string> = {
   2: 'hsl(258, 70%, 64%)',
   3: 'hsl(258, 45%, 46%)',
 };
+// The bass part: teal, well apart from the treble's violet and the red/green/gold marks.
+export const BASS_NOTE = 'hsl(176, 58%, 48%)';
+export const BASS_ROLL = 'rgba(56, 190, 180, 0.04)';
+
 export const HELPER_ONLY = 'hsl(258, 20%, 36%)'; // notes that exist only on rows 4-5
 
 export const EXPECT = '#e53935'; // press now (main rows)

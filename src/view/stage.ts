@@ -1,15 +1,15 @@
-import type { BassLayout } from '../core/bassLayout';
+import type { BassButton, BassLayout } from '../core/bassLayout';
 import type { Layout } from '../core/layout';
 import type { HitResult } from '../core/judge';
-import type { SongNote } from '../core/song';
+import { CHORD_EPS, type BassNote } from '../core/song';
 import { drawBass, drawBellows } from './bass';
+import { drawBassRoll } from './bassRoll';
 import { DUPLICATE, EXPECT, HIT, LIVE, MISSED, ONSET, UPCOMING } from './colors';
 import { Geometry } from './geometry';
 import { drawGrid, type Mark } from './grid';
 import { drawLanes, drawNotes, type RollState } from './roll';
 
 export interface ViewState extends RollState {
-  bassNotes: SongNote[]; // the song's bass part (shown, never judged)
   held: ReadonlyMap<number, number>; // treble notes held on the instrument
   bassHeld: ReadonlyMap<number, number>;
   chordHeld: ReadonlyMap<number, number>;
@@ -75,6 +75,7 @@ export class Stage {
     drawNotes(ctx, this.geo, this.layout, s);
     drawBellows(ctx, this.geo, s.pressure);
     drawBass(ctx, this.geo, this.bass, this.buildBassMarks(s));
+    drawBassRoll(ctx, this.geo, this.bass, s);
   }
 
   // Helper rows fold away when hidden, except a row the song needs (a note only it has).
@@ -93,25 +94,39 @@ export class Stage {
     const set = (id: string, m: Mark) => marks.set(id, { ...marks.get(id), ...m });
     const t = s.time;
     const heldPcs = new Set([...s.bassHeld.keys()].map(n => n % 12));
+    const heldChord = this.bass.forChord(s.chordHeld.keys());
 
-    // The song's bass, marked like the treble but not judged: holding the right pitch just
-    // turns its buttons green. Fundamental and counter-bass are both main buttons; the
-    // instrument sends the same note for either, so there's no telling which was pressed.
+    // The song's bass, marked like the treble but not judged: holding the right button just
+    // turns it green. A bass note lights both main buttons (fundamental and counter-bass; the
+    // instrument sends the same note for either); chord tones light the chord button they make.
+    const chordOf = (notes: BassNote[]) => this.bass.forChord(notes.filter(n => n.chord).map(n => n.note));
     if (s.showUpcoming) {
-      const next = s.bassNotes.find(n => n.time > t + 0.02);
-      for (const b of next ? this.bass.mainButtons(next.note) : []) set(b.id, { ring: UPCOMING });
+      const i = s.bassNotes.findIndex(n => n.time > t + 0.02);
+      const group: BassNote[] = [];
+      for (let j = i; j >= 0 && j < s.bassNotes.length && s.bassNotes[j].time - s.bassNotes[i].time < CHORD_EPS; j++) {
+        group.push(s.bassNotes[j]);
+      }
+      for (const n of group) if (!n.chord) for (const b of this.bass.mainButtons(n.note)) set(b.id, { ring: UPCOMING });
+      const chord = chordOf(group);
+      if (chord) set(chord.id, { ring: UPCOMING });
     }
-    const expected = new Set<number>(); // pitch classes
+
+    const mark = (b: BassButton, held: boolean, since: number) => {
+      const onset = t - since < ONSET_FLASH && !held;
+      set(b.id, { fill: held ? HIT : onset ? ONSET : EXPECT, ring: onset ? '#fff' : undefined });
+    };
+    const expected = new Set<number>(); // pitch classes of the bass notes due now
+    const now: BassNote[] = [];
     for (const n of s.bassNotes) {
       if (n.time > t + 0.02) break;
       if (n.time + n.duration <= t) continue;
-      const pc = n.note % 12;
-      expected.add(pc);
-      const held = heldPcs.has(pc);
-      const onset = t - n.time < ONSET_FLASH && !held;
-      const mark = { fill: held ? HIT : onset ? ONSET : EXPECT, ring: onset ? '#fff' : undefined };
-      for (const b of this.bass.mainButtons(n.note)) set(b.id, mark);
+      now.push(n);
+      if (n.chord) continue;
+      expected.add(n.note % 12);
+      for (const b of this.bass.mainButtons(n.note)) mark(b, heldPcs.has(n.note % 12), n.time);
     }
+    const chord = chordOf(now);
+    if (chord) mark(chord, heldChord?.id === chord.id, Math.max(...now.filter(n => n.chord).map(n => n.time)));
 
     // Live input. A bass note can't tell fundamental from counter-bass: fill the likely one, ring the others.
     for (const note of s.bassHeld.keys()) {
@@ -120,8 +135,7 @@ export class Stage {
       if (primary) set(primary.id, { fill: LIVE });
       for (const b of others) if (!marks.has(b.id)) set(b.id, { ring: LIVE });
     }
-    const chord = this.bass.forChord(s.chordHeld.keys());
-    if (chord) set(chord.id, { fill: LIVE });
+    if (heldChord && heldChord.id !== chord?.id) set(heldChord.id, { fill: LIVE });
     return marks;
   }
 

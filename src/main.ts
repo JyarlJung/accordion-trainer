@@ -3,7 +3,7 @@ import layoutJson from '../layouts/fr4xb-c-griff-europe.json';
 import bassJson from '../layouts/fr4xb-stradella-2row.json';
 import { BassLayout, type BassLayoutDef } from './core/bassLayout';
 import { Layout, noteName, type LayoutDef } from './core/layout';
-import { defaultOptions, extractBass, extractNotes, parseSong, type ExtractOptions, type Song, type SongNote } from './core/song';
+import { defaultOptions, extractBass, extractNotes, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode } from './core/practice';
@@ -19,10 +19,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const ui = {
   file: $<HTMLInputElement>('file'),
   songName: $('songName'),
-  trebleTracks: $('trebleTracks'),
-  bassTracks: $('bassTracks'),
-  treblePanel: $('treblePanel'),
-  bassPanel: $('bassPanel'),
+  trackRows: $('trackRows'),
+  parts: $('parts'),
   split: $<HTMLSelectElement>('split'),
   topLine: $<HTMLInputElement>('topLine'),
   fit: $<HTMLInputElement>('fit'),
@@ -73,7 +71,7 @@ const stage = new Stage($<HTMLCanvasElement>('stage'), layout, bassLayout);
 let song: Song | null = null;
 let options: ExtractOptions | null = null;
 const treble = new PartPlayer(() => midi.channels.right);
-const bass = new PartPlayer(() => midi.channels.bass);
+const bass = new PartPlayer<BassNote>(n => (n.chord ? midi.channels.chord : midi.channels.bass));
 let judge = new Judge([]);
 const waiter = new WaitMode();
 let loopStart: number | null = null;
@@ -124,17 +122,12 @@ async function loadFile(file: File): Promise<void> {
   }
 }
 
-// The part panels sit on either side of the bass board and bellows meter, in the room the
-// bass board's width cap leaves.
-const PANEL_GAP = 16;
+// The track table sits beside the bass roll; the geometry lays out both.
 function placePanels(geo: Geometry): void {
-  const { left, right, bottom } = geo.bassBox;
-  const top = geo.meterY;
-  const place = (el: HTMLElement, x0: number, x1: number) => Object.assign(el.style, {
-    left: `${x0}px`, width: `${Math.max(0, x1 - x0)}px`, top: `${top}px`, height: `${bottom - top}px`,
+  const { left, right, top, bottom } = geo.tracksBox;
+  Object.assign(ui.parts.style, {
+    left: `${left}px`, width: `${right - left}px`, top: `${top}px`, height: `${bottom - top}px`,
   });
-  place(ui.treblePanel, geo.left, left - PANEL_GAP);
-  place(ui.bassPanel, right + PANEL_GAP, geo.right);
 }
 stage.onLayout = placePanels;
 
@@ -164,28 +157,33 @@ function silence(): void {
   bass.stop();
 }
 
+// One row per track with a checkbox for each part.
 function renderTracks(): void {
-  renderTrackList(ui.trebleTracks, 'tracks');
-  renderTrackList(ui.bassTracks, 'bassTracks');
-}
-
-function renderTrackList(box: HTMLElement, part: 'tracks' | 'bassTracks'): void {
-  box.replaceChildren();
+  ui.trackRows.replaceChildren();
   if (!song || !options) return;
   const opts = options;
   for (const t of song.tracks) {
-    const label = document.createElement('label');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = opts[part].includes(t.index);
-    cb.onchange = () => {
-      opts[part] = cb.checked ? [...opts[part], t.index] : opts[part].filter(i => i !== t.index);
-      rebuild();
+    const row = document.createElement('div');
+    row.className = 'track-row';
+    row.title = `${t.name}\nch${t.channel} · ${t.noteCount}음 · ${noteName(t.minNote)}–${noteName(t.maxNote)}`;
+    const name = document.createElement('span');
+    name.className = 'track-name';
+    const ch = document.createElement('small');
+    ch.textContent = ` ch${t.channel}`;
+    name.append(t.name, ch);
+    const pick = (part: 'tracks' | 'bassTracks', title: string) => {
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.title = title;
+      cb.checked = opts[part].includes(t.index);
+      cb.onchange = () => {
+        opts[part] = cb.checked ? [...opts[part], t.index] : opts[part].filter(i => i !== t.index);
+        rebuild();
+      };
+      return cb;
     };
-    const info = document.createElement('small');
-    info.textContent = `ch${t.channel} · ${t.noteCount}음 · ${noteName(t.minNote)}–${noteName(t.maxNote)}`;
-    label.append(cb, t.name, info);
-    box.append(label);
+    row.append(name, pick('tracks', '오른손'), pick('bassTracks', '베이스'));
+    ui.trackRows.append(row);
   }
 }
 
@@ -429,7 +427,7 @@ function selectVoice(value: string): void {
     sink = synth;
   } else if (value.startsWith('midi:')) {
     midi.selectOutput(value.slice(5));
-    sink = new MidiOutSink(midi, Number(ui.volume.value), [midi.channels.right, midi.channels.bass]);
+    sink = new MidiOutSink(midi, Number(ui.volume.value), [midi.channels.right, midi.channels.bass, midi.channels.chord]);
   } else {
     const set = sampleSets.find(s => `set:${s.id}` === value)!;
     sink = sampler;
