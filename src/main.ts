@@ -14,6 +14,7 @@ import { userSampleSets } from './io/sampleSets';
 import { PartVoice } from './io/voice';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
 import type { Geometry } from './view/geometry';
+import { BeatMeter, nearestBeat } from './view/beatMeter';
 import { Stage } from './view/stage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -55,6 +56,8 @@ const ui = {
   fitRange: $<HTMLInputElement>('fitRange'),
   hitWindow: $<HTMLInputElement>('hitWindow'),
   hitWindowLabel: $('hitWindowLabel'),
+  latency: $<HTMLInputElement>('latency'),
+  latencyLabel: $('latencyLabel'),
   upcoming: $<HTMLInputElement>('upcoming'),
   thru: $<HTMLInputElement>('thru'),
   volume: $<HTMLInputElement>('volume'),
@@ -114,6 +117,7 @@ function setSong(s: Song): void {
   ui.transpose.value = String(options.transpose);
   transport.pause();
   clearLoop();
+  beatMeter.clear();
   renderTracks();
   rebuild(0);
 }
@@ -342,6 +346,17 @@ function applyHitWindow(): void {
 }
 ui.hitWindow.oninput = applyHitWindow;
 
+// The instrument's input delay, ms on the slider: a press is judged at the moment it was played,
+// that long before it arrived.
+function latency(): number {
+  return Number(ui.latency.value) / 1000;
+}
+function applyLatency(): void {
+  waiter.latencySec = latency();
+  ui.latencyLabel.textContent = `${ui.latency.value}ms`;
+}
+ui.latency.oninput = applyLatency;
+
 function applyRowGap(): void {
   ui.rowGapLabel.textContent = Number(ui.rowGap.value).toFixed(2);
 }
@@ -474,6 +489,7 @@ persist(ui.volume, 'volume', applyVolumes);
 persist(ui.bassVolume, 'bassVolume', applyVolumes);
 persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.hitWindow, 'hitWindow', applyHitWindow);
+persist(ui.latency, 'latency', applyLatency);
 persist(ui.mode, 'mode');
 persist(ui.loopUnit, 'loopUnit');
 for (const [el, key] of [[ui.sound, 'sound'], [ui.bassSound, 'bassSound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.thru, 'thru'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
@@ -481,19 +497,32 @@ for (const [el, key] of [[ui.sound, 'sound'], [ui.bassSound, 'bassSound'], [ui.h
 }
 
 midi.onNoteOff = () => drawStage();
+// How far each press lands from the nearest beat, after the delay compensation, in real ms.
+// Only while the song is running: a waiting clock has no beat to measure against.
+const beatMeter = new BeatMeter($('beatMeter'));
+function measureBeat(): void {
+  if (!song || !transport.playing || transport.waiting) return;
+  const played = transport.time - latency() * transport.rate;
+  const beat = nearestBeat(song.beats, played);
+  if (beat !== null) beatMeter.push(((played - beat) / transport.rate) * 1000);
+}
+
 midi.onNoteOn = (part, note) => {
+  measureBeat();
   if (part === 'right') judgePress(note);
   drawStage();
 };
 
 function judgePress(note: number): void {
   const waitMode = ui.mode.value === 'wait';
+  const waited = transport.waiting;
   const result = waitMode
-    ? pressInWaitMode(judge, transport, note)
-    : judge.onNoteOn(note, transport.time, transport.rate);
+    ? pressInWaitMode(judge, transport, note, latency())
+    : judge.onNoteOn(note, transport.time - latency() * transport.rate, transport.rate);
   stage.flash(note, result);
-  // Wait mode stays quiet until a note is played right, then sounds it for its written length.
-  if (result === 'hit' && waitMode && ui.sound.checked && judge.lastHit !== null) {
+  // A chord the clock is waiting for stays quiet until it's played right, then each note sounds
+  // for its written length. (Within the hit window notes already sound on arrival.)
+  if (result === 'hit' && waitMode && waited && ui.sound.checked && judge.lastHit !== null) {
     startSound();
     treble.play(trebleVoice.sink, treble.notes[judge.lastHit]);
   }
@@ -545,7 +574,14 @@ const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).p
 function frame(now: number): void {
   const waitMode = ui.mode.value === 'wait';
   if (waitMode) {
-    waiter.tick(judge, transport, now);
+    // A missed chord falls silent, bass included, and both parts play on from it once it's
+    // played right.
+    if (waiter.tick(judge, transport, now)) {
+      treble.release(trebleVoice.sink);
+      treble.seek(transport.time);
+      bass.release(bassVoice.sink);
+      bass.seek(transport.time);
+    }
   } else {
     transport.hold = null;
     transport.tick(now);
@@ -562,11 +598,13 @@ function frame(now: number): void {
   }
   const t = transport.time;
 
-  // In wait mode right-hand notes sound when they're played right (see judgePress), not on
-  // arrival. The bass isn't judged, so it plays along either way.
-  treble.update(trebleVoice.sink, t, ui.sound.checked && transport.playing && !waitMode);
-  bass.update(bassVoice.sink, t, ui.bassSound.checked && transport.playing);
-  if (!waitMode && transport.playing) judge.update(t, transport.rate);
+  // Right-hand notes sound on arrival, except while wait mode holds the clock for a missed chord
+  // (see judgePress). The bass isn't judged; it stands still while the clock waits and comes in
+  // with the chord once that's played.
+  treble.update(trebleVoice.sink, t, ui.sound.checked && transport.playing && !transport.waiting);
+  if (!transport.waiting) bass.update(bassVoice.sink, t, ui.bassSound.checked && transport.playing);
+  // Notes count as missed only once a press played in time could no longer still be arriving.
+  if (!waitMode && transport.playing) judge.update(t - latency() * transport.rate, transport.rate);
 
   drawStage();
 

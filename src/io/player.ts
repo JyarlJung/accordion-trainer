@@ -15,6 +15,12 @@ export class PartPlayer<T extends SongNote = SongNote> {
     this.next = lowerBound(this.notes, t);
   }
 
+  // Releases this part's sounding notes (the other part keeps playing).
+  release(sink: NoteSink): void {
+    for (const n of this.sounding.values()) sink.noteOff(n.note, this.channel(n));
+    this.sounding.clear();
+  }
+
   // Forgets the sounding notes; the caller silences the sink itself.
   stop(): void {
     this.sounding.clear();

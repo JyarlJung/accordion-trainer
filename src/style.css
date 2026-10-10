@@ -64,8 +64,15 @@ button:hover, .btn:hover { background: #34343f; }
 button.primary { background: var(--accent); border-color: var(--accent); min-width: 40px; }
 button.active { outline: 2px solid #ffd54f; }
 
-#rate, #rowGap, #hitWindow { width: 90px; }
+#rate, #rowGap, #hitWindow, #latency { width: 90px; }
 #volume, #bassVolume { width: 70px; }
+
+/* Beat offset meter: -50 ms on the left, +50 ms on the right. */
+#beatMeter { display: inline-flex; align-items: center; gap: 6px; }
+.meter-track { position: relative; width: 120px; height: 12px; background: #2a2a33; border-radius: 6px; }
+.meter-track::before { content: ''; position: absolute; left: 50%; top: 1px; bottom: 1px; width: 1px; background: var(--muted); }
+.meter-dot { position: absolute; top: 2px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; }
+.meter-label { min-width: 10em; color: var(--muted); font-size: 12px; }
 #midiIn, #output, #bassOutput { max-width: 180px; }
 
 main { flex: 1; min-height: 0; position: relative; }
