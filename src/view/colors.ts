@@ -24,8 +24,7 @@ const BURST = [255, 228, 222]; // near-white red
 const EXPECT_RGB = [0xe5, 0x39, 0x35];
 export const ONSET_FADE = 0.18; // s of real time to settle
 
-// EXPECT as it looks `age` real seconds after the note arrived. A note is due a moment before it
-// lands (negative age): it bursts from then, or it would show plain EXPECT for a frame first.
+// EXPECT as it looks `age` real seconds after the note was first shown due.
 export function expectFill(age: number): string {
   if (age >= ONSET_FADE) return EXPECT;
   const k = (1 - Math.max(0, age) / ONSET_FADE) ** 2; // fast at first, easing into EXPECT

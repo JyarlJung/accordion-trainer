@@ -32,6 +32,13 @@ export class Stage {
   private geoKey = '';
   private flashes: { note: number; kind: HitResult; at: number }[] = [];
   private rowsFor: unknown = null;
+  private onsetsFor: unknown = null;
+  // When each note due now was first shown (real ms), for its arrival burst. Real time, so a burst
+  // still settles while practice mode holds the clock on a missed note.
+  private readonly bursts = new Map<string, number>();
+  private readonly burstsShown = new Set<string>();
+  private frameMs = 0;
+  private onsets: { time: number; end: number; notes: BassNote[] }[] = [];
   private neededRows = new Set<number>();
   onLayout?: (geo: Geometry) => void; // called whenever the board is laid out anew
 
@@ -82,6 +89,8 @@ export class Stage {
 
     const now = performance.now();
     this.flashes = this.flashes.filter(f => now - f.at < FLASH_MS);
+    this.frameMs = now;
+    this.burstsShown.clear();
 
     const geo = this.geo;
     drawLanes(ctx, geo, s);
@@ -90,41 +99,76 @@ export class Stage {
     drawNotes(ctx, geo, this.layout, s);
     drawBellows(ctx, geo, s.pressure);
     drawBass(ctx, geo, this.bass, this.buildBassMarks(s));
+    // Notes no longer due forget their burst, so they burst again when next due (after a seek).
+    for (const key of this.bursts.keys()) if (!this.burstsShown.has(key)) this.bursts.delete(key);
     if (s.showUpcoming) this.drawBassMoves(ctx, geo, s);
     drawBassRoll(ctx, geo, this.bass, s);
   }
 
-  // A line from the current button to the next one, when both are single buttons and the current
-  // note still sounds (none across a rest).
+  // Lines from each button to the next one, when both are single buttons. A line grows from the
+  // current button as its note starts and withdraws from that end when the note ends (or the next
+  // one starts), so the previous line can still be leaving while the new one grows.
   private drawMove(ctx: CanvasRenderingContext2D, geo: Geometry, s: ViewState): void {
     const chords = s.judge.chords;
-    const i = chords.findIndex(c => c.time > s.time + 0.02);
-    if (i < 1 || chords[i - 1].ids.length !== 1 || chords[i].ids.length !== 1) return;
-    const current = s.notes[chords[i - 1].ids[0]];
-    if (current.time + current.duration <= s.time) return; // a rest before the next note: no line
-    const from = this.layout.primary(current.note);
-    const to = this.layout.primary(s.notes[chords[i].ids[0]].note);
-    if (!from || !to || from === to || ![from, to].every(b => geo.showsRow(b.row) && b.note >= geo.lo && b.note <= geo.hi)) return;
-    drawMoveLine(ctx, geo.pos(from), geo.pos(to), geo.radius);
+    let i = chords.findIndex(c => c.time > s.time + 0.02);
+    if (i < 0) i = chords.length;
+    for (const k of [i - 2, i - 1]) {
+      if (k < 0 || k + 1 >= chords.length || chords[k].ids.length !== 1 || chords[k + 1].ids.length !== 1) continue;
+      const a = s.notes[chords[k].ids[0]], b = s.notes[chords[k + 1].ids[0]];
+      const span = lineSpan(s, a.time, a.time + a.duration, b.time);
+      if (!span) continue;
+      const from = this.layout.primary(a.note), to = this.layout.primary(b.note);
+      if (!from || !to || from === to || ![from, to].every(x => geo.showsRow(x.row) && x.note >= geo.lo && x.note <= geo.hi)) continue;
+      drawMoveLine(ctx, geo.pos(from), geo.pos(to), geo.radius, span);
+    }
   }
 
-  // The bass's moves, while the current onset still sounds: when it and the next are each one bass
-  // note or one chord, every button of the current one is joined to the nearest button of the next,
-  // so each stretch of the board (the end columns repeat) shows its own way.
+  // The bass's moves, drawn the same way: when an onset and the next are each one bass note or one
+  // chord, every button of the first is joined to the nearest button of the next, so each stretch
+  // of the board (the end columns repeat) shows its own way.
   private drawBassMoves(ctx: CanvasRenderingContext2D, geo: Geometry, s: ViewState): void {
-    const notes = s.bassNotes;
-    const j = notes.findIndex(n => n.time > s.time + 0.02);
-    if (j < 1) return;
-    const next = notes.filter((n, k) => k >= j && n.time - notes[j].time < CHORD_EPS);
-    const now = notes.filter((n, k) => k < j && notes[j - 1].time - n.time < CHORD_EPS);
-    if (!now.some(n => n.time + n.duration > s.time)) return; // a rest before the next onset: no line
-    const from = this.groupButtons(now), to = this.groupButtons(next);
-    if (!from || !to || from.some(b => to.includes(b))) return;
-    for (const b of from) {
-      const a = geo.bassPos(b);
-      const nearest = to.map(t => geo.bassPos(t)).reduce((p, q) => (Math.hypot(q.x - a.x, q.y - a.y) < Math.hypot(p.x - a.x, p.y - a.y) ? q : p));
-      drawMoveLine(ctx, a, nearest, geo.bassRadius);
+    const groups = this.bassOnsets(s.bassNotes);
+    let i = groups.findIndex(g => g.time > s.time + 0.02);
+    if (i < 0) i = groups.length;
+    for (const k of [i - 2, i - 1]) {
+      if (k < 0 || k + 1 >= groups.length) continue;
+      const a = groups[k], b = groups[k + 1];
+      const span = lineSpan(s, a.time, a.end, b.time);
+      if (!span) continue;
+      const from = this.groupButtons(a.notes), to = this.groupButtons(b.notes);
+      if (!from || !to || from.some(x => to.includes(x))) continue;
+      for (const x of from) {
+        const p = geo.bassPos(x);
+        const nearest = to.map(y => geo.bassPos(y)).reduce((m, q) => (Math.hypot(q.x - p.x, q.y - p.y) < Math.hypot(m.x - p.x, m.y - p.y) ? q : m));
+        drawMoveLine(ctx, p, nearest, geo.bassRadius, span);
+      }
     }
+  }
+
+  // The bass notes grouped by onset, with when each group starts and stops sounding.
+  private bassOnsets(notes: BassNote[]): { time: number; end: number; notes: BassNote[] }[] {
+    if (notes === this.onsetsFor) return this.onsets;
+    this.onsetsFor = notes;
+    this.onsets = [];
+    for (const n of notes) {
+      const last = this.onsets[this.onsets.length - 1];
+      if (last && n.time - last.time < CHORD_EPS) {
+        last.notes.push(n);
+        last.end = Math.max(last.end, n.time + n.duration);
+      } else {
+        this.onsets.push({ time: n.time, end: n.time + n.duration, notes: [n] });
+      }
+    }
+    return this.onsets;
+  }
+
+  // The fill of a note due now: its arrival burst, timed from the frame it was first shown (so it
+  // starts bright on that frame, not a frame later).
+  private dueFill(key: string): string {
+    const at = this.bursts.get(key) ?? this.frameMs;
+    this.bursts.set(key, at);
+    this.burstsShown.add(key);
+    return expectFill((this.frameMs - at) / 1000);
   }
 
   // Every button that plays an onset of the bass, if it's a single bass note or a single chord.
@@ -172,8 +216,9 @@ export class Stage {
       for (const b of chordOf(group)) set(b.id, { ring: UPCOMING });
     }
 
-    const mark = (b: BassButton, held: boolean, since: number) => {
-      set(b.id, { fill: held ? HIT : expectFill((t - since) / s.rate) });
+    const mark = (b: BassButton, held: boolean, key: string) => {
+      const due = this.dueFill(key);
+      set(b.id, { fill: held ? HIT : due });
     };
     const expected = new Set<number>(); // pitch classes of the bass notes due now
     const now: BassNote[] = [];
@@ -184,12 +229,12 @@ export class Stage {
       if (n.chord) continue;
       expected.add(n.note % 12);
       const held = heldPcs.has(n.note % 12);
-      for (const b of this.bass.forBassNote(n.note)) mark(b, held, n.time);
+      for (const b of this.bass.forBassNote(n.note)) mark(b, held, `b${n.id}`);
     }
     const chord = chordOf(now);
     const chordHeld = chord.some(b => b.id === heldChord?.id);
-    const chordSince = Math.max(...now.filter(n => n.chord).map(n => n.time));
-    for (const b of chord) mark(b, chordHeld, chordSince);
+    const chordKey = `c${Math.max(...now.filter(n => n.chord).map(n => n.time))}`;
+    for (const b of chord) mark(b, chordHeld, chordKey);
 
     // Live input. A pressed button can't be told from the others with the same note: all light up.
     for (const note of s.bassHeld.keys()) {
@@ -225,7 +270,8 @@ export class Stage {
       // Green while played right (a key let go early counts as unplayed again); otherwise due,
       // missed or not (practice mode never misses: it waits).
       const played = s.judge.state[n.id] === 'hit' && !s.letGo.has(n.id);
-      set(primary.id, { fill: played ? HIT : expectFill((t - n.time) / s.rate) });
+      const due = this.dueFill(`t${n.id}`); // kept while green, so letting go doesn't burst again
+      set(primary.id, { fill: played ? HIT : due });
       if (s.showHelpers) for (const d of dups) set(d.id, { ring: DUPLICATE });
     }
 
@@ -250,15 +296,31 @@ export class Stage {
 
 type Point = { x: number; y: number };
 
-// A line from the edge of one button to the edge of the next (radius r), fading from the colour
-// of a note due now to the next button's. Drawn over the board, so it may cover the buttons it
-// crosses, but never the two it joins.
-function drawMoveLine(ctx: CanvasRenderingContext2D, a: Point, b: Point, r: number): void {
+const GROW_SHARE = 0.4; // of the time to the next onset, for a line to reach its button
+const GROW_MAX = 0.25; // s of real time: the longest a line takes to reach the next button
+
+// How much of the line from an onset (at `start`, sounding until `end`) to the next (at `next`) is
+// showing, as fractions from the first button's edge: it grows over 40% of the time to the next
+// onset (but no slower than GROW_MAX), so quick back-and-forth moves leave a visible gap, and
+// withdraws, from the first end, at the same pace once the note stops. Null when none of it shows.
+function lineSpan(s: ViewState, start: number, end: number, next: number): { from: number; to: number } | null {
+  const pace = Math.max(1e-3, Math.min((next - start) * GROW_SHARE, GROW_MAX * s.rate));
+  const clamp = (x: number) => Math.min(1, Math.max(0, x));
+  const to = clamp((s.time - start) / pace);
+  const from = clamp((s.time - Math.min(end, next)) / pace);
+  return to > from ? { from, to } : null;
+}
+
+// A line from the edge of one button towards the edge of the next (radius r), the `span` part of
+// it showing, fading from the colour of a note due now to the next button's. Drawn over the
+// board, so it may cover the buttons it crosses, but never the two it joins.
+function drawMoveLine(ctx: CanvasRenderingContext2D, a: Point, b: Point, r: number, span: { from: number; to: number }): void {
   const len = Math.hypot(b.x - a.x, b.y - a.y);
   if (len <= r * 2) return; // touching: nothing between the edges
   const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
   const x0 = a.x + ux * r, y0 = a.y + uy * r;
   const x1 = b.x - ux * r, y1 = b.y - uy * r;
+  const at = (f: number) => [x0 + (x1 - x0) * f, y0 + (y1 - y0) * f] as const;
   const fade = ctx.createLinearGradient(x0, y0, x1, y1);
   fade.addColorStop(0, EXPECT);
   fade.addColorStop(1, UPCOMING);
@@ -267,8 +329,8 @@ function drawMoveLine(ctx: CanvasRenderingContext2D, a: Point, b: Point, r: numb
   ctx.globalAlpha = 0.9;
   ctx.lineWidth = Math.max(2, r * 0.3);
   ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
+  ctx.moveTo(...at(span.from));
+  ctx.lineTo(...at(span.to));
   ctx.stroke();
   ctx.restore();
 }
