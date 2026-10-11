@@ -6,7 +6,8 @@ import { Layout, noteName, type LayoutDef } from './core/layout';
 import { defaultOptions, extractBass, extractNotes, extractOthers, nearestNoteTime, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
-import { WaitMode, pressInWaitMode } from './core/practice';
+import { WaitMode, pressInWaitMode, type Waited } from './core/practice';
+import { BassJudge } from './core/bassJudge';
 import { MidiIO, type Part } from './io/midi';
 import { BUILTIN_SETS, type SampleSet } from './io/audio';
 import { PartPlayer, type Route } from './io/player';
@@ -56,6 +57,7 @@ const ui = {
   latencyLabel: $('latencyLabel'),
   upcoming: $<HTMLInputElement>('upcoming'),
   followInput: $<HTMLInputElement>('followInput'),
+  waitBass: $<HTMLInputElement>('waitBass'),
   rowGapLabel: $('rowGapLabel'),
 };
 
@@ -75,6 +77,7 @@ const bass = new PartPlayer<BassNote>(n => route(n.chord ? 'chord' : 'bass', n.t
 const others = new PartPlayer(n => route('other', n.track));
 type VoicePart = Part | 'other';
 let judge = new Judge([]);
+let bassJudge = new BassJudge([], bassLayout); // wait mode's bass (see waited)
 const waiter = new WaitMode();
 const inputHeld = new Map<number, Route>(); // right-hand pitches sounding from the player's keys (see followInput)
 const AUTO = 'auto';
@@ -157,6 +160,8 @@ function rebuild(t = transport.time): void {
   songRange = rangeFor(treble.notes);
   judge = new Judge(treble.notes, n => layout.primary(n) !== undefined);
   judge.windowSec = hitWindow();
+  bassJudge = new BassJudge(bass.notes, bassLayout);
+  bassJudge.windowSec = hitWindow();
   transport.duration = song.duration;
   seek(t, true);
 }
@@ -168,6 +173,7 @@ function seek(t: number, resetStats = false): void {
   bass.seek(transport.time);
   others.seek(transport.time);
   judge.resetFrom(transport.time, resetStats);
+  bassJudge.resetFrom(transport.time);
   waiter.reset();
   hitKeys.clear();
   letGo.clear();
@@ -374,6 +380,7 @@ function hitWindow(): number {
 }
 function applyHitWindow(): void {
   judge.windowSec = hitWindow();
+  bassJudge.windowSec = hitWindow();
   ui.hitWindowLabel.textContent = `${ui.hitWindow.value}ms`;
 }
 ui.hitWindow.oninput = applyHitWindow;
@@ -549,7 +556,7 @@ persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.latency, 'latency', applyLatency);
 persist(ui.mode, 'mode');
 persist(ui.loopUnit, 'loopUnit');
-for (const [el, key] of [[ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
+for (const [el, key] of [[ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.waitBass, 'waitBass'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
   persist(el, key);
 }
 
@@ -597,17 +604,38 @@ function measurePress(part: Part, note: number): void {
   if (at !== null) beatMeter.push(((played - at) / transport.rate) * 1000);
 }
 
+// What wait mode waits for: the right hand, and the bass too unless that's switched off.
+function waited(): Waited[] {
+  return ui.waitBass.checked ? [judge, bassJudge] : [judge];
+}
+// Switched on mid-song, the bass already passed mustn't pull the clock back.
+ui.waitBass.addEventListener('change', () => bassJudge.resetFrom(transport.time));
+
+// A bass or chord button in wait mode. A chord button sends its notes one by one; it counts once
+// they make a chord.
+function bassPress(part: Part, note: number): void {
+  if (ui.mode.value !== 'wait' || !ui.waitBass.checked) return;
+  const rate = transport.rate;
+  if (part === 'bass') {
+    pressInWaitMode(waited(), transport, latency(), t => bassJudge.onBass(note, t, rate));
+    return;
+  }
+  const chord = bassLayout.forChord(midi.held.chord.keys());
+  if (chord) pressInWaitMode(waited(), transport, latency(), t => bassJudge.onChord(chord.row, chord.root, t, rate));
+}
+
 midi.onNoteOn = (part, note) => {
   measurePress(part, note);
   if (part === 'right') judgePress(note);
+  else bassPress(part, note);
   drawStage();
 };
 
 function judgePress(note: number): void {
   const waitMode = ui.mode.value === 'wait';
-  const waited = transport.waiting;
+  const wasWaiting = transport.waiting;
   const result = waitMode
-    ? pressInWaitMode(judge, transport, note, latency())
+    ? pressInWaitMode(waited(), transport, latency(), t => judge.onNoteOn(note, t, transport.rate))
     : judge.onNoteOn(note, transport.time - latency() * transport.rate, transport.rate);
   stage.flash(note, result);
   if (waitMode && result === 'hit' && judge.lastHit !== null) hitKeys.set(note, judge.lastHit);
@@ -624,7 +652,7 @@ function judgePress(note: number): void {
   }
   // A chord the clock is waiting for stays quiet until it's played right, then each note sounds
   // for its written length. (Within the hit window notes already sound on arrival.)
-  if (result === 'hit' && waitMode && waited && judge.lastHit !== null) {
+  if (result === 'hit' && waitMode && wasWaiting && judge.lastHit !== null) {
     startSound();
     treble.play(treble.notes[judge.lastHit]);
   }
@@ -677,7 +705,7 @@ function frame(now: number): void {
   if (waitMode) {
     // A missed chord falls silent, bass included, and both parts play on from it once it's
     // played right.
-    if (waiter.tick(judge, transport, now)) {
+    if (waiter.tick(waited(), transport, now)) {
       treble.release();
       treble.seek(transport.time);
       bass.release();
