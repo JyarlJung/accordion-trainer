@@ -33,10 +33,14 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(isMidi(permission)));
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => isMidi(permission));
 
+  // Keep the page running when the window is covered (by the volume mixer, say): throttled, its
+  // frame loop stops and playback stalls. It pauses itself when minimised instead.
   const win = new BrowserWindow({
     width: 1400, height: 900, backgroundColor: '#16161b', autoHideMenuBar: true, title: 'Accordion Trainer',
+    webPreferences: { backgroundThrottling: false },
   });
   win.loadURL(devUrl ?? 'app://bundle/index.html');
+  win.on('minimize', () => void win.webContents.executeJavaScript('window.accordionPause?.()').catch(() => {}));
 
   // Let the page silence any MIDI instrument it drives before the window goes away.
   let closing = false;

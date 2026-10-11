@@ -3,7 +3,7 @@ import layoutJson from '../layouts/fr4xb-c-griff-europe.json';
 import bassJson from '../layouts/fr4xb-stradella-2row.json';
 import { BassLayout, type BassLayoutDef } from './core/bassLayout';
 import { Layout, noteName, type LayoutDef } from './core/layout';
-import { defaultOptions, extractBass, extractNotes, extractOthers, nearestNoteTime, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
+import { defaultOptions, extractBass, extractNotes, extractOthers, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode, type Waited } from './core/practice';
@@ -15,7 +15,8 @@ import { userSampleSets } from './io/sampleSets';
 import { PartVoice } from './io/voice';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
 import type { Geometry } from './view/geometry';
-import { BeatMeter } from './view/beatMeter';
+import { Metronome, type Click } from './io/metronome';
+import { BeatSwing } from './view/beatSwing';
 import { Stage } from './view/stage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -37,8 +38,7 @@ const ui = {
   loopA: $<HTMLButtonElement>('loopA'),
   loopB: $<HTMLButtonElement>('loopB'),
   loopClear: $<HTMLButtonElement>('loopClear'),
-  loopUnit: $<HTMLSelectElement>('loopUnit'),
-  mode: $<HTMLSelectElement>('mode'),
+  practice: $<HTMLInputElement>('practice'), // practice (wait) mode; play mode when off
   midiIn: $<HTMLSelectElement>('midiIn'),
   chRight: $<HTMLSelectElement>('chRight'),
   chBass: $<HTMLSelectElement>('chBass'),
@@ -58,6 +58,8 @@ const ui = {
   upcoming: $<HTMLInputElement>('upcoming'),
   followInput: $<HTMLInputElement>('followInput'),
   waitBass: $<HTMLInputElement>('waitBass'),
+  metronome: $<HTMLInputElement>('metronome'),
+  metronomeUnit: $<HTMLSelectElement>('metronomeUnit'),
   rowGapLabel: $('rowGapLabel'),
 };
 
@@ -130,7 +132,6 @@ function setSong(s: Song): void {
   ui.transpose.value = String(options.transpose);
   transport.pause();
   clearLoop();
-  beatMeter.clear();
   renderTracks();
   rebuild(0);
 }
@@ -163,6 +164,7 @@ function rebuild(t = transport.time): void {
   bassJudge = new BassJudge(bass.notes, bassLayout);
   bassJudge.windowSec = hitWindow();
   transport.duration = song.duration;
+  makeClicks();
   seek(t, true);
 }
 
@@ -319,7 +321,58 @@ function togglePlay(): void {
 // Audio needs a user gesture to start; play and key presses both count.
 function startSound(): void {
   for (const { voice } of voices.values()) voice.start();
+  metronome.start();
 }
+
+// ---------- metronome ----------
+
+// Clicks are scheduled a little ahead on the audio clock, so they land on the beat rather than on
+// the next frame. None while the clock waits, and none past where it's held. The volume slider
+// at 0 turns them off.
+const metronome = new Metronome();
+const CLICK_AHEAD = 0.05; // s of real time
+let clicks: { time: number; kind: Click }[] = []; // in time order
+let nextClick = 0; // index into clicks of the next one to play
+let clickedAt = -Infinity; // song time of the last frame that scheduled clicks
+
+// The clicks for the chosen spacing, whatever the swing does (it always reaches an end on each
+// beat). 2분 clicks on every other beat of a bar, from its first, so once per swing there and
+// back; 4분 on every beat; 8분 also halfway between beats, with a softer click.
+function makeClicks(): void {
+  const beats = song?.beats ?? [];
+  const barStarts = new Set(song?.bars ?? []);
+  const unit = ui.metronomeUnit.value;
+  let inBar = 0;
+  clicks = beats.flatMap((b, i) => {
+    if (barStarts.has(b)) inBar = 0;
+    const kind: Click = barStarts.has(b) ? 'bar' : 'beat';
+    if (unit === 'half') return inBar++ % 2 === 0 ? [{ time: b, kind }] : [];
+    const next = beats[i + 1];
+    if (unit === 'eighth' && next !== undefined) return [{ time: b, kind }, { time: (b + next) / 2, kind: 'sub' as Click }];
+    return [{ time: b, kind }];
+  });
+  clickedAt = -Infinity;
+}
+
+function clickBeats(t: number): void {
+  const volume = Number(ui.metronome.value);
+  if (volume <= 0 || !transport.playing || transport.waiting) {
+    clickedAt = -Infinity; // pick up from wherever the clock is when clicks resume
+    return;
+  }
+  // A jump (seek, loop, wait-mode rewind) restarts from the click at or after t.
+  if (t < clickedAt - 1e-6 || t > clickedAt + 0.25 * transport.rate) {
+    nextClick = clicks.findIndex(c => c.time >= t - 1e-6);
+    if (nextClick < 0) nextClick = clicks.length;
+  }
+  clickedAt = t;
+  const until = Math.min(t + CLICK_AHEAD * transport.rate, transport.hold ?? Infinity);
+  for (; nextClick < clicks.length && clicks[nextClick].time <= until; nextClick++) {
+    metronome.click((clicks[nextClick].time - t) / transport.rate, clicks[nextClick].kind, volume);
+  }
+}
+ui.metronome.addEventListener('input', () => metronome.start());
+ui.metronomeUnit.addEventListener('change', makeClicks);
 
 function clearLoop(): void {
   loopStart = null;
@@ -345,9 +398,9 @@ ui.rate.oninput = () => {
   transport.rate = Number(ui.rate.value);
   ui.rateLabel.textContent = `${Math.round(transport.rate * 100)}%`;
 };
-// Loop points snap to the bar or beat grid: A to the start of the unit it's in, B to its end.
+// Loop points snap to bars: A to the start of the bar it's in, B to the end of its bar.
 function loopGrid(): number[] {
-  return (ui.loopUnit.value === 'beat' ? song?.beats : song?.bars) ?? [];
+  return song?.bars ?? [];
 }
 
 ui.loopA.onclick = () => {
@@ -417,13 +470,21 @@ function shutdown(): void {
   midi.shutdown();
 }
 window.addEventListener('beforeunload', shutdown);
-// The Electron shell calls this before closing so the messages get out before the process exits.
-Object.assign(window, { accordionShutdown: shutdown });
+// The Electron shell calls accordionShutdown before closing, so the messages get out before the
+// process exits, and accordionPause when the window is minimised.
+function pause(): void {
+  if (transport.playing) togglePlay();
+}
+Object.assign(window, { accordionShutdown: shutdown, accordionPause: pause });
 
-// Background tabs stop requestAnimationFrame, so note-offs would never fire.
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden && transport.playing) togglePlay();
-});
+// Hidden pages stop requestAnimationFrame, so note-offs would never fire: pause. Not in the
+// Electron shell, which keeps the page running when its window is merely covered (e.g. by the
+// Windows volume mixer) and pauses on minimise instead.
+if (!navigator.userAgent.includes('Electron')) {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) pause();
+  });
+}
 
 window.addEventListener('keydown', e => {
   if (e.target instanceof HTMLInputElement && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
@@ -554,18 +615,27 @@ ui.midiIn.onchange = () => {
 persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.latency, 'latency', applyLatency);
-persist(ui.mode, 'mode');
-persist(ui.loopUnit, 'loopUnit');
-for (const [el, key] of [[ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.waitBass, 'waitBass'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
+persist(ui.metronome, 'metronomeLevel');
+persist(ui.metronomeUnit, 'metronomeUnit', makeClicks);
+for (const [el, key] of [[ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.practice, 'practice'], [ui.waitBass, 'waitBass'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
   persist(el, key);
 }
+
+// The options that only apply in practice mode fade out without it.
+function applyPractice(): void {
+  const on = ui.practice.checked;
+  for (const el of document.querySelectorAll<HTMLElement>('.practice-only')) el.classList.toggle('off', !on);
+  ui.waitBass.disabled = ui.hitWindow.disabled = !on;
+}
+ui.practice.addEventListener('change', applyPractice);
+applyPractice();
 
 // "Play by my keys" (wait mode, right hand): the sound follows the player's keys instead of the
 // written notes. A note still starts on arrival, to cover the input delay, and holds through its
 // hit window; a press that hits it takes it over (or starts it, if it hasn't arrived yet), and
 // any other press sounds as played. Either way it stops when the key is released.
 function followInput(): boolean {
-  return ui.mode.value === 'wait' && ui.followInput.checked;
+  return ui.practice.checked && ui.followInput.checked;
 }
 treble.endOf = n => {
   const written = n.time + n.duration;
@@ -584,25 +654,13 @@ midi.onNoteOff = (part, note) => {
   if (id !== undefined) {
     hitKeys.delete(note);
     const n = treble.notes[id];
-    if (ui.mode.value === 'wait' && transport.time < n.time + n.duration) letGo.add(id);
+    if (ui.practice.checked && transport.time < n.time + n.duration) letGo.add(id);
   }
   drawStage();
 };
-// How early or late each press lands against the song note it plays, after the delay
-// compensation, in real ms: the right hand against notes of that pitch, bass and chord buttons
-// against bass notes and chord tones of that pitch class. A press with no such note nearby is a
-// wrong note and isn't measured; neither is one while the clock waits.
-const MATCH_MS = 250;
-const beatMeter = new BeatMeter($('beatMeter'));
-function measurePress(part: Part, note: number): void {
-  if (!song || !transport.playing || transport.waiting) return;
-  const played = transport.time - latency() * transport.rate;
-  const within = (MATCH_MS / 1000) * transport.rate;
-  const at = part === 'right'
-    ? nearestNoteTime(treble.notes, played, within, n => n.note === note)
-    : nearestNoteTime(bass.notes, played, within, n => n.chord === (part === 'chord') && (n.note - note) % 12 === 0);
-  if (at !== null) beatMeter.push(((played - at) / transport.rate) * 1000);
-}
+// The beat swing beside the metronome switch; a right-hand press is marked where the dot was when
+// it was played (the input delay before it arrived taken off).
+const beatSwing = new BeatSwing($('beatSwing'));
 
 // What wait mode waits for: the right hand, and the bass too unless that's switched off.
 function waited(): Waited[] {
@@ -614,7 +672,7 @@ ui.waitBass.addEventListener('change', () => bassJudge.resetFrom(transport.time)
 // A bass or chord button in wait mode. A chord button sends its notes one by one; it counts once
 // they make a chord.
 function bassPress(part: Part, note: number): void {
-  if (ui.mode.value !== 'wait' || !ui.waitBass.checked) return;
+  if (!ui.practice.checked || !ui.waitBass.checked) return;
   const rate = transport.rate;
   if (part === 'bass') {
     pressInWaitMode(waited(), transport, latency(), t => bassJudge.onBass(note, t, rate));
@@ -625,14 +683,17 @@ function bassPress(part: Part, note: number): void {
 }
 
 midi.onNoteOn = (part, note) => {
-  measurePress(part, note);
-  if (part === 'right') judgePress(note);
-  else bassPress(part, note);
+  if (part === 'right') {
+    beatSwing.mark(transport.time - latency() * transport.rate, song?.beats ?? []);
+    judgePress(note);
+  } else {
+    bassPress(part, note);
+  }
   drawStage();
 };
 
 function judgePress(note: number): void {
-  const waitMode = ui.mode.value === 'wait';
+  const waitMode = ui.practice.checked;
   const wasWaiting = transport.waiting;
   const result = waitMode
     ? pressInWaitMode(waited(), transport, latency(), t => judge.onNoteOn(note, t, transport.rate))
@@ -700,8 +761,29 @@ function drawStage(): void {
 
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
+// An error in one frame mustn't stop the loop (playback and drawing would freeze for good): the
+// next frame is asked for first, and the error is shown so it can be reported.
 function frame(now: number): void {
-  const waitMode = ui.mode.value === 'wait';
+  requestAnimationFrame(frame);
+  try {
+    step(now);
+  } catch (e) {
+    showError(e);
+  }
+}
+
+const errorBox = $('error');
+errorBox.onclick = () => (errorBox.hidden = true);
+function showError(e: unknown): void {
+  const text = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  if (errorBox.textContent === text && !errorBox.hidden) return;
+  console.error(e);
+  errorBox.textContent = text;
+  errorBox.hidden = false;
+}
+
+function step(now: number): void {
+  const waitMode = ui.practice.checked;
   if (waitMode) {
     // A missed chord falls silent, bass included, and both parts play on from it once it's
     // played right.
@@ -728,6 +810,8 @@ function frame(now: number): void {
     }
   }
   const t = transport.time;
+  clickBeats(t);
+  beatSwing.update(t, song?.beats ?? []);
 
   // Right-hand notes sound on arrival, except while wait mode holds the clock for a missed chord
   // (see judgePress). The bass and the tracks playing along aren't judged; they stand still while the clock waits and come in
@@ -747,7 +831,6 @@ function frame(now: number): void {
   }
   ui.time.textContent = `${fmt(t)} / ${fmt(transport.duration)}${transport.waiting ? ' · 대기 중' : ''}`;
   ui.lastCh.textContent = midi.lastChannel ? `최근 입력 ch${midi.lastChannel}` : '';
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 

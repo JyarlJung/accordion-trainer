@@ -36,6 +36,8 @@ body.collapsed #toolbarBody { display: none; }
 }
 .sep { width: 1px; height: 18px; background: var(--line); }
 .group { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.group.wide { gap: 6px 10px; } /* a run of related settings that wraps as one */
+.practice-only.off { opacity: 0.4; pointer-events: none; } /* options that only apply in practice mode */
 #time { white-space: nowrap; }
 .group[hidden], .bar[hidden] { display: none; }
 
@@ -65,13 +67,18 @@ button.primary { background: var(--accent); border-color: var(--accent); min-wid
 button.active { outline: 2px solid #ffd54f; }
 
 #rate, #rowGap, #hitWindow, #latency { width: 90px; }
+#metronome { width: 70px; }
 
-/* Beat offset meter: -50 ms on the left, +50 ms on the right. */
-#beatMeter { display: inline-flex; align-items: center; gap: 6px; }
-.meter-track { position: relative; width: 120px; height: 12px; background: #2a2a33; border-radius: 6px; }
-.meter-track::before { content: ''; position: absolute; left: 50%; top: 1px; bottom: 1px; width: 1px; background: var(--muted); }
-.meter-dot { position: absolute; top: 2px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; }
-.meter-label { min-width: 10em; color: var(--muted); font-size: 12px; }
+/* Beat swing: a dot reaching an end of the track on every click; presses leave fading marks. */
+.swing-track { position: relative; display: inline-block; width: 160px; height: 14px; margin: 0 5px; border-left: 2px solid var(--muted); border-right: 2px solid var(--muted); }
+.swing-track::before { content: ''; position: absolute; left: 0; right: 0; top: 6px; height: 2px; background: #2a2a33; }
+.swing-tick { position: absolute; width: 1px; margin-left: -0.5px; background: var(--muted); }
+.swing-tick.mid { top: 2px; height: 10px; }
+.swing-tick.short { top: 4px; height: 6px; }
+.swing-dot, .swing-mark { position: absolute; top: 2.5px; width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%; }
+.swing-dot { background: #fff; opacity: 0.75; }
+.swing-mark { background: #1e88e5; animation: swing-fade 1.2s ease-out forwards; }
+@keyframes swing-fade { from { opacity: 0.6; } to { opacity: 0; } }
 #midiIn { max-width: 180px; }
 
 main { flex: 1; min-height: 0; position: relative; }
@@ -101,5 +108,9 @@ main { flex: 1; min-height: 0; position: relative; }
 .part-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 
 canvas { display: block; width: 100%; height: 100%; }
+
+/* An error caught in the frame loop, shown so it can be reported. */
+#error { position: fixed; left: 12px; bottom: 12px; max-width: 60%; padding: 6px 10px; background: #7f1d1d; color: #fff; border-radius: 6px; font-size: 12px; cursor: pointer; z-index: 10; }
+#error[hidden] { display: none; }
 
 body.dragging main { outline: 3px dashed var(--accent); outline-offset: -8px; }
