@@ -38,8 +38,6 @@ const ui = {
   loopClear: $<HTMLButtonElement>('loopClear'),
   loopUnit: $<HTMLSelectElement>('loopUnit'),
   mode: $<HTMLSelectElement>('mode'),
-  sound: $<HTMLInputElement>('sound'),
-  bassSound: $<HTMLInputElement>('bassSound'),
   midiIn: $<HTMLSelectElement>('midiIn'),
   chRight: $<HTMLSelectElement>('chRight'),
   chBass: $<HTMLSelectElement>('chBass'),
@@ -551,7 +549,7 @@ persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.latency, 'latency', applyLatency);
 persist(ui.mode, 'mode');
 persist(ui.loopUnit, 'loopUnit');
-for (const [el, key] of [[ui.sound, 'sound'], [ui.bassSound, 'bassSound'], [ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
+for (const [el, key] of [[ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
   persist(el, key);
 }
 
@@ -613,7 +611,7 @@ function judgePress(note: number): void {
     : judge.onNoteOn(note, transport.time - latency() * transport.rate, transport.rate);
   stage.flash(note, result);
   if (waitMode && result === 'hit' && judge.lastHit !== null) hitKeys.set(note, judge.lastHit);
-  if (waitMode && ui.sound.checked && followInput()) {
+  if (waitMode && followInput()) {
     // Key velocity is ignored, like the bellows: a hit sounds at its written velocity, any
     // other press at a fixed one.
     startSound();
@@ -626,7 +624,7 @@ function judgePress(note: number): void {
   }
   // A chord the clock is waiting for stays quiet until it's played right, then each note sounds
   // for its written length. (Within the hit window notes already sound on arrival.)
-  if (result === 'hit' && waitMode && waited && ui.sound.checked && judge.lastHit !== null) {
+  if (result === 'hit' && waitMode && waited && judge.lastHit !== null) {
     startSound();
     treble.play(treble.notes[judge.lastHit]);
   }
@@ -706,9 +704,9 @@ function frame(now: number): void {
   // Right-hand notes sound on arrival, except while wait mode holds the clock for a missed chord
   // (see judgePress). The bass and the tracks playing along aren't judged; they stand still while the clock waits and come in
   // with the chord once that's played.
-  treble.update(t, ui.sound.checked && transport.playing && !transport.waiting);
+  treble.update(t, transport.playing && !transport.waiting);
   if (!transport.waiting) {
-    bass.update(t, ui.bassSound.checked && transport.playing);
+    bass.update(t, transport.playing);
     others.update(t, transport.playing);
   }
   // Notes count as missed only once a press played in time could no longer still be arriving.

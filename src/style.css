@@ -89,7 +89,7 @@ main { flex: 1; min-height: 0; position: relative; }
   font-size: 12px;
   overflow: hidden;
 }
-.track-head, .track-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 64px 20px 20px; align-items: center; gap: 4px; }
+.track-head, .track-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 110px 20px 20px; align-items: center; gap: 4px; }
 .track-head { color: var(--muted); }
 .track-head > :not(:first-child), .track-row > input { justify-self: center; margin: 0; }
 .track-row select { width: 100%; min-width: 0; padding: 1px 4px; }

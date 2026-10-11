@@ -65,18 +65,16 @@ export class BassLayout {
     return [...fundamental, ...counter];
   }
 
-  // The two buttons that play a bass note: its fundamental and its counter-bass, each in the
-  // column nearest C. Either one is a right way to play it.
-  mainButtons(note: number): BassButton[] {
-    const all = this.forBassNote(note);
-    return (['bass', 'counter'] as const).map(row => all.find(b => b.row === row)!);
-  }
-
   // The twelve pitch classes in the board's column order: the twelve columns around C.
   laneOrder(): number[] {
     return this.buttons
       .filter(b => b.row === 'bass' && b.col >= this.centerCol - 6 && b.col < this.centerCol + 6)
       .map(b => b.root);
+  }
+
+  // Every button the same as b: same row and root (the board repeats its end columns).
+  twins(b: BassButton): BassButton[] {
+    return this.buttons.filter(o => o.row === b.row && o.root === b.root);
   }
 
   // Identifies one chord button from the held notes (any octave or inversion).

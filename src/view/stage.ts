@@ -84,12 +84,53 @@ export class Stage {
     const now = performance.now();
     this.flashes = this.flashes.filter(f => now - f.at < FLASH_MS);
 
-    drawLanes(ctx, this.geo, s);
-    drawGrid(ctx, this.geo, this.layout, this.buildMarks(s), s.cut?.note ?? null);
-    drawNotes(ctx, this.geo, this.layout, s);
-    drawBellows(ctx, this.geo, s.pressure);
-    drawBass(ctx, this.geo, this.bass, this.buildBassMarks(s));
-    drawBassRoll(ctx, this.geo, this.bass, s);
+    const geo = this.geo;
+    drawLanes(ctx, geo, s);
+    drawGrid(ctx, geo, this.layout, this.buildMarks(s), s.cut?.note ?? null);
+    if (s.showUpcoming) this.drawMove(ctx, geo, s);
+    drawNotes(ctx, geo, this.layout, s);
+    drawBellows(ctx, geo, s.pressure);
+    drawBass(ctx, geo, this.bass, this.buildBassMarks(s));
+    if (s.showUpcoming) this.drawBassMoves(ctx, geo, s);
+    drawBassRoll(ctx, geo, this.bass, s);
+  }
+
+  // A line from the current button to the next one, when both are single buttons.
+  private drawMove(ctx: CanvasRenderingContext2D, geo: Geometry, s: ViewState): void {
+    const chords = s.judge.chords;
+    const i = chords.findIndex(c => c.time > s.time + 0.02);
+    if (i < 1 || chords[i - 1].ids.length !== 1 || chords[i].ids.length !== 1) return;
+    const from = this.layout.primary(s.notes[chords[i - 1].ids[0]].note);
+    const to = this.layout.primary(s.notes[chords[i].ids[0]].note);
+    if (!from || !to || from === to || ![from, to].every(b => geo.showsRow(b.row) && b.note >= geo.lo && b.note <= geo.hi)) return;
+    drawMoveLine(ctx, geo.pos(from), geo.pos(to), geo.radius);
+  }
+
+  // The bass's moves: when the current and the next onset are each one bass note or one chord,
+  // every button of the current one is joined to the nearest button of the next, so each stretch of
+  // the board (the end columns repeat) shows its own way.
+  private drawBassMoves(ctx: CanvasRenderingContext2D, geo: Geometry, s: ViewState): void {
+    const notes = s.bassNotes;
+    const j = notes.findIndex(n => n.time > s.time + 0.02);
+    if (j < 1) return;
+    const next = notes.filter((n, k) => k >= j && n.time - notes[j].time < CHORD_EPS);
+    const now = notes.filter((n, k) => k < j && notes[j - 1].time - n.time < CHORD_EPS);
+    const from = this.groupButtons(now), to = this.groupButtons(next);
+    if (!from || !to || from.some(b => to.includes(b))) return;
+    for (const b of from) {
+      const a = geo.bassPos(b);
+      const nearest = to.map(t => geo.bassPos(t)).reduce((p, q) => (Math.hypot(q.x - a.x, q.y - a.y) < Math.hypot(p.x - a.x, p.y - a.y) ? q : p));
+      drawMoveLine(ctx, a, nearest, geo.bassRadius);
+    }
+  }
+
+  // Every button that plays an onset of the bass, if it's a single bass note or a single chord.
+  private groupButtons(group: BassNote[]): BassButton[] | null {
+    const bassNotes = group.filter(n => !n.chord), tones = group.filter(n => n.chord);
+    if (bassNotes.length === 1 && tones.length === 0) return this.bass.forBassNote(bassNotes[0].note);
+    if (bassNotes.length > 0) return null;
+    const chord = this.bass.forChord(tones.map(n => n.note));
+    return chord ? this.bass.twins(chord) : null;
   }
 
   // Helper rows fold away when hidden, except a row the song needs (a note only it has).
@@ -111,18 +152,21 @@ export class Stage {
     const heldChord = this.bass.forChord(s.chordHeld.keys());
 
     // The song's bass, marked like the treble but not judged: holding the right button just
-    // turns it green. A bass note lights both main buttons (fundamental and counter-bass; the
-    // instrument sends the same note for either); chord tones light the chord button they make.
-    const chordOf = (notes: BassNote[]) => this.bass.forChord(notes.filter(n => n.chord).map(n => n.note));
+    // turns it green. Every button that sounds the note is marked alike: a bass note lights all its
+    // fundamental and counter-bass buttons (the instrument sends the same note for any of them, and
+    // the board repeats its end columns); chord tones light every button of the chord they make.
+    const chordOf = (notes: BassNote[]) => {
+      const b = this.bass.forChord(notes.filter(n => n.chord).map(n => n.note));
+      return b ? this.bass.twins(b) : [];
+    };
     if (s.showUpcoming) {
       const i = s.bassNotes.findIndex(n => n.time > t + 0.02);
       const group: BassNote[] = [];
       for (let j = i; j >= 0 && j < s.bassNotes.length && s.bassNotes[j].time - s.bassNotes[i].time < CHORD_EPS; j++) {
         group.push(s.bassNotes[j]);
       }
-      for (const n of group) if (!n.chord) for (const b of this.bass.mainButtons(n.note)) set(b.id, { ring: UPCOMING });
-      const chord = chordOf(group);
-      if (chord) set(chord.id, { ring: UPCOMING });
+      for (const n of group) if (!n.chord) for (const b of this.bass.forBassNote(n.note)) set(b.id, { ring: UPCOMING });
+      for (const b of chordOf(group)) set(b.id, { ring: UPCOMING });
     }
 
     const mark = (b: BassButton, held: boolean, since: number) => {
@@ -137,26 +181,20 @@ export class Stage {
       now.push(n);
       if (n.chord) continue;
       expected.add(n.note % 12);
-      // The two main buttons are filled; the other buttons with the same note (the board repeats
-      // its end columns) get an orange ring, like the treble's duplicate rows.
       const held = heldPcs.has(n.note % 12);
-      const main = this.bass.mainButtons(n.note);
-      for (const b of main) mark(b, held, n.time);
-      for (const b of this.bass.forBassNote(n.note)) {
-        if (!main.includes(b)) set(b.id, held ? { fill: HIT } : { ring: DUPLICATE });
-      }
+      for (const b of this.bass.forBassNote(n.note)) mark(b, held, n.time);
     }
     const chord = chordOf(now);
-    if (chord) mark(chord, heldChord?.id === chord.id, Math.max(...now.filter(n => n.chord).map(n => n.time)));
+    const chordHeld = chord.some(b => b.id === heldChord?.id);
+    const chordSince = Math.max(...now.filter(n => n.chord).map(n => n.time));
+    for (const b of chord) mark(b, chordHeld, chordSince);
 
-    // Live input. A bass note can't tell fundamental from counter-bass: fill the likely one, ring the others.
+    // Live input. A pressed button can't be told from the others with the same note: all light up.
     for (const note of s.bassHeld.keys()) {
       if (expected.has(note % 12)) continue;
-      const [primary, ...others] = this.bass.forBassNote(note);
-      if (primary) set(primary.id, { fill: LIVE });
-      for (const b of others) if (!marks.has(b.id)) set(b.id, { ring: LIVE });
+      for (const b of this.bass.forBassNote(note)) set(b.id, { fill: LIVE });
     }
-    if (heldChord && heldChord.id !== chord?.id) set(heldChord.id, { fill: LIVE });
+    if (heldChord && !chordHeld) for (const b of this.bass.twins(heldChord)) set(b.id, { fill: LIVE });
     return marks;
   }
 
@@ -204,4 +242,29 @@ export class Stage {
     }
     return marks;
   }
+}
+
+type Point = { x: number; y: number };
+
+// A line from the edge of one button to the edge of the next (radius r), fading from the colour
+// of a note due now to the next button's. Drawn over the board, so it may cover the buttons it
+// crosses, but never the two it joins.
+function drawMoveLine(ctx: CanvasRenderingContext2D, a: Point, b: Point, r: number): void {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len <= r * 2) return; // touching: nothing between the edges
+  const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+  const x0 = a.x + ux * r, y0 = a.y + uy * r;
+  const x1 = b.x - ux * r, y1 = b.y - uy * r;
+  const fade = ctx.createLinearGradient(x0, y0, x1, y1);
+  fade.addColorStop(0, EXPECT);
+  fade.addColorStop(1, UPCOMING);
+  ctx.save();
+  ctx.strokeStyle = fade;
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = Math.max(2, r * 0.3);
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.restore();
 }

@@ -22,7 +22,7 @@ const BASS_MAX_WIDTH = 0.55; // cap the bass board at this share of the width, s
 const MAX_PITCH = 140;
 const BASS_LABEL = 14; // bass row titles, this far outside the bass board, px
 const SIDE_GAP = 32; // between the bass board and the area beside it (room for the row titles), px
-const TRACKS_W = 400; // track table, px
+const TRACKS_W = 460; // track table, px
 const PANEL_GAP = 12;
 
 export interface Box {
