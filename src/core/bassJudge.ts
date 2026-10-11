@@ -4,7 +4,7 @@ import { CHORD_EPS, type BassNote } from './song';
 
 // One thing to play on the bass side: a bass note (any button sounding its pitch class) or a
 // chord (any button of that chord).
-interface Target {
+export interface BassTarget {
   time: number;
   pc: number; // bass note: pitch class; chord: root
   chord: string | null; // chord row ('major', 'minor', ...), or null for a bass note
@@ -17,7 +17,8 @@ const EPS = 1e-6;
 // don't make a chord the board has aren't asked for.
 export class BassJudge {
   windowSec = 0.12;
-  private readonly targets: Target[] = [];
+  lastHit: BassTarget | null = null; // the target matched by the latest 'hit'
+  private readonly targets: BassTarget[] = [];
   private readonly done: boolean[] = [];
   private ptr = 0;
 
@@ -63,7 +64,7 @@ export class BassJudge {
     return this.match(t, rate, g => g.chord === row && g.pc === root);
   }
 
-  private match(t: number, rate: number, fits: (g: Target) => boolean): HitResult {
+  private match(t: number, rate: number, fits: (g: BassTarget) => boolean): HitResult {
     if (this.targets.length === 0) return 'free';
     const win = this.windowSec * rate + EPS;
     let best = -1;
@@ -75,6 +76,7 @@ export class BassJudge {
     }
     if (best < 0) return 'wrong';
     this.done[best] = true;
+    this.lastHit = this.targets[best];
     return 'hit';
   }
 }

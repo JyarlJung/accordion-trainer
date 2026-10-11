@@ -3,11 +3,11 @@ import layoutJson from '../layouts/fr4xb-c-griff-europe.json';
 import bassJson from '../layouts/fr4xb-stradella-2row.json';
 import { BassLayout, type BassLayoutDef } from './core/bassLayout';
 import { Layout, noteName, type LayoutDef } from './core/layout';
-import { defaultOptions, extractBass, extractNotes, extractOthers, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
+import { CHORD_EPS, defaultOptions, extractBass, extractNotes, extractOthers, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode, type Waited } from './core/practice';
-import { BassJudge } from './core/bassJudge';
+import { BassJudge, type BassTarget } from './core/bassJudge';
 import { MidiIO, type Part } from './io/midi';
 import { BUILTIN_SETS, type SampleSet } from './io/audio';
 import { PartPlayer, type Route } from './io/player';
@@ -81,7 +81,13 @@ type VoicePart = Part | 'other';
 let judge = new Judge([]);
 let bassJudge = new BassJudge([], bassLayout); // wait mode's bass (see waited)
 const waiter = new WaitMode();
-const inputHeld = new Map<number, Route>(); // right-hand pitches sounding from the player's keys (see followInput)
+// Sounds the player's keys hold (see followInput), by part and key: stopped when the key is
+// released. A chord's keys share one list, so letting go of any of them stops the chord.
+interface Sound {
+  route: Route;
+  note: number;
+}
+const inputHeld = new Map<string, Sound[]>();
 const AUTO = 'auto';
 let sampleSets: SampleSet[] = [...BUILTIN_SETS];
 const trackVoices = new Map<number, string>(); // track index -> voice, for the current song
@@ -593,11 +599,6 @@ function route(part: VoicePart, track: number): Route {
   return { sink: voiceOf(part, track).sink, channel: channelOf(part, track) };
 }
 
-// The player's own right-hand presses that match no note sound like the first right-hand track.
-function freeRoute(): Route {
-  return route('right', options?.tracks[0] ?? -1);
-}
-
 // Brings every voice in use up to its track's choice, silencing first if any changes.
 function syncVoices(): void {
   const stale = [...voices.values()].filter(e => e.voice.value !== wantedVoice(e.part, e.track));
@@ -630,26 +631,60 @@ function applyPractice(): void {
 ui.practice.addEventListener('change', applyPractice);
 applyPractice();
 
-// "Play by my keys" (wait mode, right hand): the sound follows the player's keys instead of the
-// written notes. A note still starts on arrival, to cover the input delay, and holds through its
-// hit window; a press that hits it takes it over (or starts it, if it hasn't arrived yet), and
-// any other press sounds as played. Either way it stops when the key is released.
+// "Play by my keys" (practice mode; the bass too when it's practised): the sound follows the
+// player's keys instead of the written notes. A note still starts on arrival, to cover the input
+// delay, and holds through its hit window; a press that hits it takes it over (or starts it, if it
+// hasn't arrived yet), and any other press sounds as played. Either way it stops when the key is
+// released.
 function followInput(): boolean {
   return ui.practice.checked && ui.followInput.checked;
 }
+function followBass(): boolean {
+  return followInput() && ui.waitBass.checked;
+}
+const holdUntil = (n: SongNote) => n.time + (judge.windowSec + latency()) * transport.rate;
 treble.endOf = n => {
   const written = n.time + n.duration;
   if (!followInput() || judge.state[n.id] !== 'pending') return written;
-  return Math.max(written, n.time + (judge.windowSec + latency()) * transport.rate);
+  return Math.max(written, holdUntil(n));
 };
+// Bass notes a press takes over leave the player, so any still sounding is unplayed so far.
+bass.endOf = n => (followBass() ? Math.max(n.time + n.duration, holdUntil(n)) : n.time + n.duration);
 ui.followInput.addEventListener('change', silence);
+ui.waitBass.addEventListener('change', silence);
+
+function holdKey(part: Part, key: number, sounds: Sound[]): void {
+  inputHeld.set(`${part}:${key}`, sounds);
+}
+function releaseKey(part: Part, key: number): void {
+  const sounds = inputHeld.get(`${part}:${key}`);
+  if (!sounds) return;
+  inputHeld.delete(`${part}:${key}`);
+  for (const s of sounds.splice(0)) s.route.sink.noteOff(s.note, s.route.channel);
+}
+// A key that matches no song note sounds as played, on the part's first track's voice.
+function playFree(part: Part, key: number): Sound {
+  const tracks = part === 'right' ? options?.tracks : options?.bassTracks;
+  const r = route(part, tracks?.[0] ?? -1);
+  r.sink.noteOn(key, FREE_VELOCITY, r.channel);
+  return { route: r, note: key };
+}
+// The song's bass notes a hit plays, taken over from the clock: started if not yet sounding, or
+// (with `restart`) in any case.
+function takeOver(target: BassTarget, restart = false): Sound[] {
+  const pc = (note: number) => ((note % 12) + 12) % 12;
+  return bass.notes
+    .filter(n => Math.abs(n.time - target.time) < CHORD_EPS
+      && (target.chord !== null ? n.chord : !n.chord && pc(n.note) === target.pc))
+    .map(n => {
+      const r = route(n.chord ? 'chord' : 'bass', n.track);
+      if (!bass.claim(n.id) || restart) r.sink.noteOn(n.note, n.velocity, r.channel);
+      return { route: r, note: n.note };
+    });
+}
 
 midi.onNoteOff = (part, note) => {
-  const held = part === 'right' ? inputHeld.get(note) : undefined;
-  if (held) {
-    inputHeld.delete(note);
-    held.sink.noteOff(note, held.channel);
-  }
+  releaseKey(part, note);
   const id = part === 'right' ? hitKeys.get(note) : undefined;
   if (id !== undefined) {
     hitKeys.delete(note);
@@ -671,15 +706,32 @@ ui.waitBass.addEventListener('change', () => bassJudge.resetFrom(transport.time)
 
 // A bass or chord button in wait mode. A chord button sends its notes one by one; it counts once
 // they make a chord.
+// With "play by my keys", a hit takes over the song's notes it plays; anything else sounds as
+// played. A chord button's notes sound one by one as they come, then the chord's song notes take
+// over once they make it.
 function bassPress(part: Part, note: number): void {
   if (!ui.practice.checked || !ui.waitBass.checked) return;
   const rate = transport.rate;
+  const follow = followBass();
+  if (follow) startSound();
   if (part === 'bass') {
-    pressInWaitMode(waited(), transport, latency(), t => bassJudge.onBass(note, t, rate));
+    const result = pressInWaitMode(waited(), transport, latency(), t => bassJudge.onBass(note, t, rate));
+    if (!follow) return;
+    const taken = result === 'hit' && bassJudge.lastHit ? takeOver(bassJudge.lastHit) : [];
+    holdKey(part, note, taken.length ? taken : [playFree(part, note)]);
     return;
   }
+  if (follow) holdKey(part, note, [playFree(part, note)]);
   const chord = bassLayout.forChord(midi.held.chord.keys());
-  if (chord) pressInWaitMode(waited(), transport, latency(), t => bassJudge.onChord(chord.row, chord.root, t, rate));
+  if (!chord) return;
+  const result = pressInWaitMode(waited(), transport, latency(), t => bassJudge.onChord(chord.row, chord.root, t, rate));
+  if (!follow || result !== 'hit' || !bassJudge.lastHit) return;
+  // The keys' own sounds go first. They can share pitch and channel with the chord's song notes,
+  // and stopping them stops those too, so the song notes start again.
+  const keys = [...midi.held.chord.keys()];
+  for (const k of keys) releaseKey(part, k);
+  const taken = takeOver(bassJudge.lastHit, true);
+  for (const k of keys) holdKey(part, k, taken.length ? taken : [playFree(part, k)]);
 }
 
 midi.onNoteOn = (part, note) => {
@@ -706,9 +758,13 @@ function judgePress(note: number): void {
     startSound();
     const hit = result === 'hit' ? judge.lastHit : null;
     const taken = hit !== null && treble.claim(hit);
-    const r = hit !== null ? route('right', treble.notes[hit].track) : freeRoute();
-    if (!taken) r.sink.noteOn(note, hit !== null ? treble.notes[hit].velocity : FREE_VELOCITY, r.channel);
-    inputHeld.set(note, r);
+    if (hit === null) {
+      holdKey('right', note, [playFree('right', note)]);
+      return;
+    }
+    const r = route('right', treble.notes[hit].track);
+    if (!taken) r.sink.noteOn(note, treble.notes[hit].velocity, r.channel);
+    holdKey('right', note, [{ route: r, note }]);
     return;
   }
   // A chord the clock is waiting for stays quiet until it's played right, then each note sounds
