@@ -70,7 +70,7 @@ button.active { outline: 2px solid #ffd54f; }
 #metronome { width: 70px; }
 
 /* Beat swing: a dot reaching an end of the track on every click; presses leave fading marks. */
-.swing-track { position: relative; display: inline-block; width: 160px; height: 14px; margin: 0 5px; border-left: 2px solid var(--muted); border-right: 2px solid var(--muted); }
+.swing-track { position: relative; display: inline-block; width: 200px; height: 14px; margin: 0 5px; border-left: 2px solid var(--muted); border-right: 2px solid var(--muted); }
 .swing-track::before { content: ''; position: absolute; left: 0; right: 0; top: 6px; height: 2px; background: #2a2a33; }
 .swing-tick { position: absolute; width: 1px; margin-left: -0.5px; background: var(--muted); }
 .swing-tick.mid { top: 2px; height: 10px; }
@@ -96,7 +96,7 @@ main { flex: 1; min-height: 0; position: relative; }
   font-size: 12px;
   overflow: hidden;
 }
-.track-head, .track-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 110px 20px 20px; align-items: center; gap: 4px; }
+.track-head, .track-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 110px 22px 20px 20px; align-items: center; gap: 4px; }
 .track-head { color: var(--muted); }
 .track-head > :not(:first-child), .track-row > input { justify-self: center; margin: 0; }
 .track-row select { width: 100%; min-width: 0; padding: 1px 4px; }

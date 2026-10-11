@@ -6,6 +6,7 @@ export interface RawNote {
   duration: number;
   velocity: number; // 0..1
   track: number;
+  drum: boolean; // on MIDI channel 10: the note number picks a drum, so it's never transposed
 }
 
 export interface SongNote extends RawNote {
@@ -86,6 +87,7 @@ export function parseSong(data: ArrayBuffer, name: string): Song {
     if (t.notes.length === 0) return;
     const own = t.notes.map(n => ({
       note: n.midi, time: n.time, duration: noteLength(midi, t.notes, n), velocity: n.velocity, track: index,
+      drum: t.channel === 9,
     }));
     notes.push(...own);
     tracks.push(trackInfo(index, decodeText(t.name).trim() || t.instrument.name || `트랙 ${index + 1}`, t.channel + 1, own));
@@ -180,9 +182,14 @@ export function defaultOptions(): ExtractOptions {
 
 type Range = { min: number; max: number };
 
+// A note moved by the transposition, unless it's a drum (its number names the drum, not a pitch).
+function transposed(n: RawNote, opts: ExtractOptions): number {
+  return n.drum ? n.note : n.note + opts.transpose;
+}
+
 // Where a note of the right hand shows: transposed, and moved by octaves into the keyboard's range.
 function treblePitch(n: RawNote, opts: ExtractOptions, range: Range): number {
-  let note = n.note + opts.transpose;
+  let note = transposed(n, opts);
   if (opts.fitToRange) {
     while (note < range.min) note += 12;
     while (note > range.max) note -= 12;
@@ -232,7 +239,7 @@ export function extractBass(song: Song, opts: ExtractOptions, range: Range): Bas
     const bass = g.length === 1 || g[1].note - g[0].note >= BASS_GAP ? g[0] : null;
     const seen = new Set<string>();
     for (const n of g) {
-      const note = n.note + opts.transpose;
+      const note = transposed(n, opts);
       const chord = n !== bass;
       const key = `${chord}:${note % 12}`;
       if (seen.has(key)) continue;
@@ -265,7 +272,7 @@ export function extractOthers(song: Song, opts: ExtractOptions): SongNote[] {
   const used = new Set([...opts.tracks, ...opts.bassTracks]);
   return song.notes
     .filter(n => !used.has(n.track))
-    .map((n, id) => ({ ...n, note: Math.min(127, Math.max(0, n.note + opts.transpose)), id }));
+    .map((n, id) => ({ ...n, note: Math.min(127, Math.max(0, transposed(n, opts))), id }));
 }
 
 // First index whose time >= t.

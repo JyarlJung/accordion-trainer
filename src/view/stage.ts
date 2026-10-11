@@ -125,7 +125,8 @@ export class Stage {
 
   // The bass's moves, drawn the same way: when an onset and the next are each one bass note or one
   // chord, every button of the first is joined to the nearest button of the next, so each stretch
-  // of the board (the end columns repeat) shows its own way.
+  // of the board (the end columns repeat) shows its own way. A bass note to a chord joins only the
+  // root nearest the chord; a chord to a bass note gets no line.
   private drawBassMoves(ctx: CanvasRenderingContext2D, geo: Geometry, s: ViewState): void {
     const groups = this.bassOnsets(s.bassNotes);
     let i = groups.findIndex(g => g.time > s.time + 0.02);
@@ -137,11 +138,24 @@ export class Stage {
       if (!span) continue;
       const from = this.groupButtons(a.notes), to = this.groupButtons(b.notes);
       if (!from || !to || from.some(x => to.includes(x))) continue;
-      for (const x of from) {
-        const p = geo.bassPos(x);
-        const nearest = to.map(y => geo.bassPos(y)).reduce((m, q) => (Math.hypot(q.x - p.x, q.y - p.y) < Math.hypot(m.x - p.x, m.y - p.y) ? q : m));
-        drawMoveLine(ctx, p, nearest, geo.bassRadius, span);
+      const dist = (x: BassButton, y: BassButton) => {
+        const p = geo.bassPos(x), q = geo.bassPos(y);
+        return Math.hypot(q.x - p.x, q.y - p.y);
+      };
+      const nearest = (x: BassButton, among: BassButton[]) => among.reduce((m, y) => (dist(x, y) < dist(x, m) ? y : m));
+      // From a chord back to a bass note: no line; the hand returns to the next root without one.
+      // From a bass note to a chord: one line, from the fundamental button nearest the chord (the
+      // root the chord is played over), not from every counter-bass and repeated column too.
+      const isChord = (x: BassButton) => x.row !== 'bass' && x.row !== 'counter';
+      if (isChord(from[0]) && !isChord(to[0])) continue;
+      const roots = from.filter(x => x.row === 'bass');
+      if (isChord(to[0]) && roots.length) {
+        const pairs = roots.map(x => [x, nearest(x, to)] as const);
+        const [x, y] = pairs.reduce((m, p) => (dist(...p) < dist(...m) ? p : m));
+        drawMoveLine(ctx, geo.bassPos(x), geo.bassPos(y), geo.bassRadius, span);
+        continue;
       }
+      for (const x of from) drawMoveLine(ctx, geo.bassPos(x), geo.bassPos(nearest(x, to)), geo.bassRadius, span);
     }
   }
 

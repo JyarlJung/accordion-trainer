@@ -92,6 +92,7 @@ const AUTO = 'auto';
 let sampleSets: SampleSet[] = [...BUILTIN_SETS];
 const trackVoices = new Map<number, string>(); // track index -> voice, for the current song
 const trackVolumes = new Map<number, number>(); // track index -> volume 0..1, for the current song
+const mutedTracks = new Set<number>(); // tracks silenced without losing their volume, for the current song
 const DEFAULT_VOLUME = 0.8;
 // A voice per part and track: the part sets the MIDI channel, the track the sound and volume.
 // Track -1 is the player's own presses that match no song note.
@@ -131,6 +132,7 @@ function setSong(s: Song): void {
   options = defaultOptions();
   trackVoices.clear();
   trackVolumes.clear();
+  mutedTracks.clear();
   ui.songName.textContent = s.name;
   ui.songName.classList.remove('muted');
   ui.topLine.checked = options.topLineOnly;
@@ -171,6 +173,9 @@ function rebuild(t = transport.time): void {
   bassJudge.windowSec = hitWindow();
   transport.duration = song.duration;
   makeClicks();
+  // Every track's voices now, not at their first note: a voice made then would still be loading
+  // its samples when that note plays.
+  for (const tr of song.tracks) for (const part of ['right', 'bass', 'chord', 'other'] as const) voiceOf(part, tr.index);
   seek(t, true);
 }
 
@@ -195,7 +200,7 @@ function silence(): void {
   others.stop();
 }
 
-// One row per track: its voice, its volume and a checkbox for each part.
+// One row per track: its voice, its volume, a mute switch and a checkbox for each part.
 function renderTracks(): void {
   ui.trackRows.replaceChildren();
   if (!song || !options) return;
@@ -242,7 +247,16 @@ function renderTracks(): void {
       volume.title = volumeTitle();
       applyVolumes();
     };
-    row.append(name, voice, volume, pick('tracks', '오른손'), pick('bassTracks', '베이스'));
+    const mute = document.createElement('input');
+    mute.type = 'checkbox';
+    mute.title = '음소거';
+    mute.checked = mutedTracks.has(t.index);
+    mute.onchange = () => {
+      if (mute.checked) mutedTracks.add(t.index);
+      else mutedTracks.delete(t.index);
+      applyVolumes();
+    };
+    row.append(name, voice, volume, mute, pick('tracks', '오른손'), pick('bassTracks', '베이스'));
     ui.trackRows.append(row);
   }
 }
@@ -428,6 +442,7 @@ ui.loopB.onclick = () => {
 ui.loopClear.onclick = clearLoop;
 // Each track has its own volume, in whichever part its notes play.
 function volumeOf(track: number): number {
+  if (mutedTracks.has(track)) return 0;
   return trackVolumes.get(track) ?? DEFAULT_VOLUME;
 }
 function applyVolumes(): void {

@@ -66,6 +66,9 @@ export interface SampleSet {
   loop?: [number, number] | false;
   loops?: Record<string, [number, number]>; // per-sample loop regions (fractions), used as given
   stack?: number[]; // semitone offsets sounded together for each note, e.g. [0, 12] for octave reeds
+  // Each note plays the nearest sample at or below it, pitched up (as Starbound's instruments do),
+  // rather than the nearest either way.
+  shiftUp?: boolean;
   crossfade?: number; // seconds blended across each loop's seam, so any loop points join smoothly
   maxHold?: number; // seconds a held note lasts before fading out on its own
   release?: number;
@@ -164,6 +167,8 @@ export class SamplerSink implements NoteSink {
   private out: Tone.Gain | null = null;
   private set: SampleSet | null = null;
   private volume = 1;
+  // Notes started while the samples load, sounded once they're in if still held.
+  private readonly waiting = new Map<number, { note: number; velocity: number; channel: number }>();
 
   setVolume(v: number): void {
     this.volume = v;
@@ -180,7 +185,11 @@ export class SamplerSink implements NoteSink {
       return prepareSample(set.baseUrl + file, Tone.Frequency(name).toMidi(), own ?? loop, !own, set.crossfade ?? 0);
     }));
     // Ignore a stale load if another set was chosen meanwhile.
-    if (this.set === set) this.samples = loaded;
+    if (this.set !== set) return;
+    this.samples = loaded;
+    const held = [...this.waiting.values()];
+    this.waiting.clear();
+    for (const w of held) this.noteOn(w.note, w.velocity, w.channel);
   }
 
   start(): Promise<void> {
@@ -188,8 +197,11 @@ export class SamplerSink implements NoteSink {
   }
 
   noteOn(note: number, velocity: number, channel: number): void {
-    if (this.samples.length === 0) return;
     const key = channel * 128 + note;
+    if (this.samples.length === 0) {
+      if (this.set) this.waiting.set(key, { note, velocity, channel });
+      return;
+    }
     // Re-striking a sounding pitch: cut the old voice fast and leave a short gap so the repeat is audible.
     const retrigger = this.voices.has(key) ? RETRIGGER_GAP : 0;
     this.release(key, retrigger || (this.set?.release ?? 0.12));
@@ -199,7 +211,9 @@ export class SamplerSink implements NoteSink {
     // Each stacked reed plays from the sample nearest its own pitch.
     const srcs = (this.set?.stack ?? [0]).map(offset => {
       const pitch = note + offset;
-      const s = this.samples.reduce((a, b) => (Math.abs(b.root - pitch) < Math.abs(a.root - pitch) ? b : a));
+      const below = this.set?.shiftUp ? this.samples.filter(x => x.root <= pitch) : [];
+      const s = (below.length ? below : this.samples)
+        .reduce((a, b) => (Math.abs(b.root - pitch) < Math.abs(a.root - pitch) ? b : a));
       const src = new Tone.ToneBufferSource(s.loop
         ? { url: s.buffer, loop: true, loopStart: s.loop.start, loopEnd: s.loop.end }
         : { url: s.buffer });
@@ -231,6 +245,7 @@ export class SamplerSink implements NoteSink {
   }
 
   noteOff(note: number, channel: number): void {
+    this.waiting.delete(channel * 128 + note);
     this.release(channel * 128 + note, this.set?.release ?? 0.12);
   }
 
@@ -245,6 +260,7 @@ export class SamplerSink implements NoteSink {
   }
 
   allOff(): void {
+    this.waiting.clear();
     for (const key of [...this.voices.keys()]) this.release(key, this.set?.release ?? 0.12);
   }
 }
