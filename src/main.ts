@@ -800,6 +800,8 @@ function drawStage(): void {
     firstBar: song?.firstBar ?? 1,
     cut: options?.cut ?? null,
     letGo,
+    practice: ui.practice.checked,
+    rate: transport.rate,
     noteNames: ui.noteNames.checked,
     bassChromatic: ui.bassChromatic.checked,
     held: midi.held.right,

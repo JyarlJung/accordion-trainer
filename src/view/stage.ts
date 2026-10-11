@@ -4,7 +4,7 @@ import type { HitResult } from '../core/judge';
 import { CHORD_EPS, type BassNote } from '../core/song';
 import { drawBass, drawBellows } from './bass';
 import { drawBassRoll } from './bassRoll';
-import { DUPLICATE, EXPECT, HIT, LIVE, MISSED, ONSET, UPCOMING } from './colors';
+import { DUPLICATE, EXPECT, HIT, LIVE, UPCOMING, expectFill } from './colors';
 import { Geometry } from './geometry';
 import { drawGrid, type Mark } from './grid';
 import { drawLanes, drawNotes, type RollState } from './roll';
@@ -25,7 +25,6 @@ export interface ViewState extends RollState {
 const FLASH_MS = 400;
 const MIN_W = 320;
 const MIN_H = 240;
-const ONSET_FLASH = 0.12; // seconds of song time
 
 export class Stage {
   private readonly ctx: CanvasRenderingContext2D;
@@ -95,26 +94,30 @@ export class Stage {
     drawBassRoll(ctx, geo, this.bass, s);
   }
 
-  // A line from the current button to the next one, when both are single buttons.
+  // A line from the current button to the next one, when both are single buttons and the current
+  // note still sounds (none across a rest).
   private drawMove(ctx: CanvasRenderingContext2D, geo: Geometry, s: ViewState): void {
     const chords = s.judge.chords;
     const i = chords.findIndex(c => c.time > s.time + 0.02);
     if (i < 1 || chords[i - 1].ids.length !== 1 || chords[i].ids.length !== 1) return;
-    const from = this.layout.primary(s.notes[chords[i - 1].ids[0]].note);
+    const current = s.notes[chords[i - 1].ids[0]];
+    if (current.time + current.duration <= s.time) return; // a rest before the next note: no line
+    const from = this.layout.primary(current.note);
     const to = this.layout.primary(s.notes[chords[i].ids[0]].note);
     if (!from || !to || from === to || ![from, to].every(b => geo.showsRow(b.row) && b.note >= geo.lo && b.note <= geo.hi)) return;
     drawMoveLine(ctx, geo.pos(from), geo.pos(to), geo.radius);
   }
 
-  // The bass's moves: when the current and the next onset are each one bass note or one chord,
-  // every button of the current one is joined to the nearest button of the next, so each stretch of
-  // the board (the end columns repeat) shows its own way.
+  // The bass's moves, while the current onset still sounds: when it and the next are each one bass
+  // note or one chord, every button of the current one is joined to the nearest button of the next,
+  // so each stretch of the board (the end columns repeat) shows its own way.
   private drawBassMoves(ctx: CanvasRenderingContext2D, geo: Geometry, s: ViewState): void {
     const notes = s.bassNotes;
     const j = notes.findIndex(n => n.time > s.time + 0.02);
     if (j < 1) return;
     const next = notes.filter((n, k) => k >= j && n.time - notes[j].time < CHORD_EPS);
     const now = notes.filter((n, k) => k < j && notes[j - 1].time - n.time < CHORD_EPS);
+    if (!now.some(n => n.time + n.duration > s.time)) return; // a rest before the next onset: no line
     const from = this.groupButtons(now), to = this.groupButtons(next);
     if (!from || !to || from.some(b => to.includes(b))) return;
     for (const b of from) {
@@ -170,8 +173,7 @@ export class Stage {
     }
 
     const mark = (b: BassButton, held: boolean, since: number) => {
-      const onset = t - since < ONSET_FLASH && !held;
-      set(b.id, { fill: held ? HIT : onset ? ONSET : EXPECT, ring: onset ? '#fff' : undefined });
+      set(b.id, { fill: held ? HIT : expectFill((t - since) / s.rate) });
     };
     const expected = new Set<number>(); // pitch classes of the bass notes due now
     const now: BassNote[] = [];
@@ -208,7 +210,7 @@ export class Stage {
       const next = s.judge.chords.find(c => c.time > t + 0.02);
       for (const id of next?.ids ?? []) {
         const b = this.layout.primary(s.notes[id].note);
-        if (b) set(b.id, { ring: UPCOMING, alpha: 1 });
+        if (b) set(b.id, { ring: UPCOMING });
       }
     }
 
@@ -220,25 +222,27 @@ export class Stage {
       const [primary, ...dups] = this.layout.candidates(n.note);
       if (!primary) continue;
       expected.add(n.note);
-      const state = s.judge.state[n.id] === 'hit' && s.letGo.has(n.id) ? 'pending' : s.judge.state[n.id];
-      const fill = state === 'hit' ? HIT : state === 'missed' ? MISSED : EXPECT;
-      // Briefly flash at each onset so a repeated note reads as a new press.
-      const onset = t - n.time < ONSET_FLASH && state !== 'hit';
-      set(primary.id, { fill: onset ? ONSET : fill, ring: onset ? '#fff' : undefined, alpha: 1 });
-      if (s.showHelpers) for (const d of dups) set(d.id, { ring: DUPLICATE, alpha: 1 });
+      // Green while played right (a key let go early counts as unplayed again); otherwise due,
+      // missed or not (practice mode never misses: it waits).
+      const played = s.judge.state[n.id] === 'hit' && !s.letGo.has(n.id);
+      set(primary.id, { fill: played ? HIT : expectFill((t - n.time) / s.rate) });
+      if (s.showHelpers) for (const d of dups) set(d.id, { ring: DUPLICATE });
     }
 
     // Live input from the instrument.
     for (const note of s.held.keys()) {
       const [primary, ...dups] = this.layout.candidates(note);
       if (!primary) continue;
-      if (!expected.has(note)) set(primary.id, { fill: LIVE, alpha: 1 });
-      if (s.showHelpers) for (const d of dups) set(d.id, { ring: LIVE, alpha: 1 });
+      if (!expected.has(note)) set(primary.id, { fill: LIVE });
+      if (s.showHelpers) for (const d of dups) set(d.id, { ring: LIVE });
     }
 
-    for (const f of this.flashes) {
-      const b = this.layout.primary(f.note);
-      if (b && f.kind === 'wrong') set(b.id, { cross: true, alpha: 1 });
+    // Wrong notes get a cross in practice mode; in play mode they just show as pressed.
+    if (s.practice) {
+      for (const f of this.flashes) {
+        const b = this.layout.primary(f.note);
+        if (b && f.kind === 'wrong') set(b.id, { cross: true });
+      }
     }
     return marks;
   }

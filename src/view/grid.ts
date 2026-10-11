@@ -6,7 +6,6 @@ export interface Mark {
   fill?: string;
   ring?: string;
   cross?: boolean;
-  alpha?: number;
 }
 
 export interface ButtonStyle {
@@ -84,7 +83,8 @@ export function drawGrid(
     const { x, y } = geo.pos(b);
     const m = marks.get(b.id);
     const cut = cutNote !== null && b.note <= cutNote;
-    ctx.globalAlpha = m?.alpha ?? (cut && !m ? 0.3 : b.role === 'helper' && !m ? 0.55 : 1);
+    // Marked buttons are drawn in full; unmarked cut-away and helper buttons dimmed.
+    ctx.globalAlpha = m ? 1 : cut ? 0.3 : b.role === 'helper' ? 0.55 : 1;
     // Buttons are lane-sized, so only C carries its octave.
     const label = b.note % 12 === 0 ? noteName(b.note) : noteName(b.note).replace(/-?\d+$/, '');
     drawButton(ctx, x, y, r, label, {

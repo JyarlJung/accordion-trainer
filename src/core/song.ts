@@ -84,12 +84,28 @@ export function parseSong(data: ArrayBuffer, name: string): Song {
   const notes: RawNote[] = [];
   midi.tracks.forEach((t, index) => {
     if (t.notes.length === 0) return;
-    const own = t.notes.map(n => ({ note: n.midi, time: n.time, duration: n.duration, velocity: n.velocity, track: index }));
+    const own = t.notes.map(n => ({
+      note: n.midi, time: n.time, duration: noteLength(midi, t.notes, n), velocity: n.velocity, track: index,
+    }));
     notes.push(...own);
     tracks.push(trackInfo(index, decodeText(t.name).trim() || t.instrument.name || `트랙 ${index + 1}`, t.channel + 1, own));
   });
   const { firstBarEnd, ...grid } = beatGrid(midi);
   return fitLeadIn({ name, duration: midi.duration, tracks, notes: sortNotes(notes), firstBar: 1, ...grid }, firstBarEnd);
+}
+
+type MidiNote = Midi['tracks'][number]['notes'][number];
+
+// A note's length in seconds. Notes shorter than a 32nd (some files have note-ons and note-offs on
+// the same tick) would be invisible yet still wait to be played, so they last until the track's
+// next note starts, at most a whole note and at least a 32nd (just a 32nd if none follows).
+function noteLength(midi: Midi, notes: MidiNote[], n: MidiNote): number {
+  const ppq = midi.header.ppq;
+  const shortest = ppq / 8;
+  if (n.durationTicks >= shortest) return n.duration;
+  const next = notes.reduce((min, o) => (o.ticks > n.ticks && o.ticks < min ? o.ticks : min), Infinity);
+  const end = Number.isFinite(next) ? Math.max(n.ticks + shortest, Math.min(next, n.ticks + ppq * 4)) : n.ticks + shortest;
+  return midi.header.ticksToSeconds(end) - n.time;
 }
 
 const MAX_LEAD_BARS = 2; // empty bars kept before the first note
