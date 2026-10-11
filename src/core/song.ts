@@ -244,6 +244,14 @@ export function extractNotes(song: Song, opts: ExtractOptions, range: Range): So
   return result;
 }
 
+// The tracks given to neither part, as written (transposed), to play along with.
+export function extractOthers(song: Song, opts: ExtractOptions): SongNote[] {
+  const used = new Set([...opts.tracks, ...opts.bassTracks]);
+  return song.notes
+    .filter(n => !used.has(n.track))
+    .map((n, id) => ({ ...n, note: Math.min(127, Math.max(0, n.note + opts.transpose)), id }));
+}
+
 // Start time of the note nearest t (within `within` seconds) that `match` accepts, or null.
 export function nearestNoteTime<T extends RawNote>(notes: T[], t: number, within: number, match: (n: T) => boolean): number | null {
   let best: number | null = null;

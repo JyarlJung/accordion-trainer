@@ -27,19 +27,11 @@
           <option value="play">재생 모드</option>
           <option value="wait">기다리기 모드</option>
         </select>
-        <span class="group">볼륨
-          <label title="오른손 볼륨">오 <input type="range" id="volume" min="0" max="1" step="0.01" value="0.8" /></label>
-          <span id="volumeLabel" class="mono">80%</span>
-          <label title="베이스 볼륨">베 <input type="range" id="bassVolume" min="0" max="1" step="0.01" value="0.8" /></label>
-          <span id="bassVolumeLabel" class="mono">80%</span>
-        </span>
         <span class="spacer"></span>
-        <button id="settingsBtn" title="음색, 악기 연결, 화면 방향 설정">⚙</button>
+        <button id="settingsBtn" title="악기 연결, 화면 방향 설정">⚙</button>
         <button id="collapse" title="툴바 접기/펼치기">▲</button>
       </div>
       <div id="settings" class="bar" hidden>
-        <label>음색 오른손 <select id="output"></select></label>
-        <label>베이스 <select id="bassOutput"></select></label>
         <label>입력 <select id="midiIn"></select></label>
         <label title="악기 입력과 MIDI 출력에 쓰는 채널">채널 오른손 <select id="chRight"></select></label>
         <label>베이스 <select id="chBass"></select></label>
@@ -78,10 +70,12 @@
     <main>
       <canvas id="stage"></canvas>
       <div id="parts">
-        <div class="track-head"><span>트랙</span><span title="오른손">오</span><span title="베이스">베</span></div>
+        <div class="track-head"><span>트랙</span><span title="트랙의 음을 낼 소리. 자동은 오른손·베이스 기본 음색">음색</span><span>볼륨</span><span title="오른손">오</span><span title="베이스">베</span></div>
         <div id="trackRows" class="track-rows"></div>
         <div class="track-head">
           <span>소리</span>
+          <span></span>
+          <span></span>
           <input type="checkbox" id="sound" checked title="오른손 소리" />
           <input type="checkbox" id="bassSound" checked title="베이스 소리" />
         </div>

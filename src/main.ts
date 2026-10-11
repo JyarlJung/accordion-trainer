@@ -3,13 +3,13 @@ import layoutJson from '../layouts/fr4xb-c-griff-europe.json';
 import bassJson from '../layouts/fr4xb-stradella-2row.json';
 import { BassLayout, type BassLayoutDef } from './core/bassLayout';
 import { Layout, noteName, type LayoutDef } from './core/layout';
-import { defaultOptions, extractBass, extractNotes, nearestNoteTime, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
+import { defaultOptions, extractBass, extractNotes, extractOthers, nearestNoteTime, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode } from './core/practice';
 import { MidiIO, type Part } from './io/midi';
 import { BUILTIN_SETS, type SampleSet } from './io/audio';
-import { PartPlayer } from './io/player';
+import { PartPlayer, type Route } from './io/player';
 import { userSampleSets } from './io/sampleSets';
 import { PartVoice } from './io/voice';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
@@ -40,8 +40,6 @@ const ui = {
   mode: $<HTMLSelectElement>('mode'),
   sound: $<HTMLInputElement>('sound'),
   bassSound: $<HTMLInputElement>('bassSound'),
-  output: $<HTMLSelectElement>('output'),
-  bassOutput: $<HTMLSelectElement>('bassOutput'),
   midiIn: $<HTMLSelectElement>('midiIn'),
   chRight: $<HTMLSelectElement>('chRight'),
   chBass: $<HTMLSelectElement>('chBass'),
@@ -60,10 +58,6 @@ const ui = {
   latencyLabel: $('latencyLabel'),
   upcoming: $<HTMLInputElement>('upcoming'),
   followInput: $<HTMLInputElement>('followInput'),
-  volume: $<HTMLInputElement>('volume'),
-  volumeLabel: $('volumeLabel'),
-  bassVolume: $<HTMLInputElement>('bassVolume'),
-  bassVolumeLabel: $('bassVolumeLabel'),
   rowGapLabel: $('rowGapLabel'),
 };
 
@@ -71,19 +65,28 @@ const layout = new Layout(layoutJson as LayoutDef);
 const keyRange = { min: layout.minNote, max: layout.maxNote };
 const transport = new Transport();
 const midi = new MidiIO();
-const trebleVoice = new PartVoice(midi, () => [midi.channels.right]);
-const bassVoice = new PartVoice(midi, () => [midi.channels.bass, midi.channels.chord]);
 const bassLayout = new BassLayout(bassJson as BassLayoutDef);
 const canvas = $<HTMLCanvasElement>('stage');
 const stage = new Stage(canvas, layout, bassLayout);
 
 let song: Song | null = null;
 let options: ExtractOptions | null = null;
-const treble = new PartPlayer(() => midi.channels.right);
-const bass = new PartPlayer<BassNote>(n => (n.chord ? midi.channels.chord : midi.channels.bass));
+const treble = new PartPlayer(n => route('right', n.track));
+const bass = new PartPlayer<BassNote>(n => route(n.chord ? 'chord' : 'bass', n.track));
+// Tracks in neither part play along on their own MIDI channels, at their volume.
+const others = new PartPlayer(n => route('other', n.track));
+type VoicePart = Part | 'other';
 let judge = new Judge([]);
 const waiter = new WaitMode();
-const inputHeld = new Set<number>(); // right-hand pitches sounding from the player's keys (see followInput)
+const inputHeld = new Map<number, Route>(); // right-hand pitches sounding from the player's keys (see followInput)
+const AUTO = 'auto';
+let sampleSets: SampleSet[] = [...BUILTIN_SETS];
+const trackVoices = new Map<number, string>(); // track index -> voice, for the current song
+const trackVolumes = new Map<number, number>(); // track index -> volume 0..1, for the current song
+const DEFAULT_VOLUME = 0.8;
+// A voice per part and track: the part sets the MIDI channel, the track the sound and volume.
+// Track -1 is the player's own presses that match no song note.
+const voices = new Map<string, { part: VoicePart; track: number; voice: PartVoice }>();
 const FREE_VELOCITY = 0.8; // for presses that don't match a song note
 // Wait mode: a hit note whose key is let go before the note ends goes back to its unplayed
 // colour (the hit still counts).
@@ -117,6 +120,8 @@ function rangeFor(list: SongNote[]): { lo: number; hi: number } | null {
 function setSong(s: Song): void {
   song = s;
   options = defaultOptions();
+  trackVoices.clear();
+  trackVolumes.clear();
   ui.songName.textContent = s.name;
   ui.songName.classList.remove('muted');
   ui.topLine.checked = options.topLineOnly;
@@ -150,6 +155,7 @@ function rebuild(t = transport.time): void {
   if (!song || !options) return;
   treble.notes = extractNotes(song, options, keyRange);
   bass.notes = extractBass(song, options, keyRange);
+  others.notes = extractOthers(song, options);
   songRange = rangeFor(treble.notes);
   judge = new Judge(treble.notes, n => layout.primary(n) !== undefined);
   judge.windowSec = hitWindow();
@@ -162,6 +168,7 @@ function seek(t: number, resetStats = false): void {
   silence();
   treble.seek(transport.time);
   bass.seek(transport.time);
+  others.seek(transport.time);
   judge.resetFrom(transport.time, resetStats);
   waiter.reset();
   hitKeys.clear();
@@ -170,13 +177,13 @@ function seek(t: number, resetStats = false): void {
 
 function silence(): void {
   inputHeld.clear();
-  trebleVoice.sink.allOff();
-  bassVoice.sink.allOff();
+  for (const { voice } of voices.values()) voice.sink.allOff();
   treble.stop();
   bass.stop();
+  others.stop();
 }
 
-// One row per track with a checkbox for each part.
+// One row per track: its voice, its volume and a checkbox for each part.
 function renderTracks(): void {
   ui.trackRows.replaceChildren();
   if (!song || !options) return;
@@ -201,7 +208,29 @@ function renderTracks(): void {
       };
       return cb;
     };
-    row.append(name, pick('tracks', '오른손'), pick('bassTracks', '베이스'));
+    const voice = document.createElement('select');
+    voice.title = '이 트랙의 음색';
+    fillVoiceOptions(voice);
+    voice.value = trackVoices.get(t.index) ?? AUTO;
+    if (voice.selectedIndex < 0) voice.value = AUTO; // a MIDI output that isn't connected now
+    voice.onchange = () => {
+      trackVoices.set(t.index, voice.value);
+      syncVoices();
+    };
+    const volume = document.createElement('input');
+    volume.type = 'range';
+    volume.min = '0';
+    volume.max = '1';
+    volume.step = '0.05';
+    volume.value = String(volumeOf(t.index));
+    const volumeTitle = () => `볼륨 ${Math.round(Number(volume.value) * 100)}%`;
+    volume.title = volumeTitle();
+    volume.oninput = () => {
+      trackVolumes.set(t.index, Number(volume.value));
+      volume.title = volumeTitle();
+      applyVolumes();
+    };
+    row.append(name, voice, volume, pick('tracks', '오른손'), pick('bassTracks', '베이스'));
     ui.trackRows.append(row);
   }
 }
@@ -285,8 +314,7 @@ function togglePlay(): void {
 
 // Audio needs a user gesture to start; play and key presses both count.
 function startSound(): void {
-  trebleVoice.start();
-  bassVoice.start();
+  for (const { voice } of voices.values()) voice.start();
 }
 
 function clearLoop(): void {
@@ -335,18 +363,13 @@ ui.loopB.onclick = () => {
   seek(loop.a, true);
 };
 ui.loopClear.onclick = clearLoop;
-// Each part has its own volume.
-function volumeOf(voice: PartVoice): number {
-  return Number((voice === trebleVoice ? ui.volume : ui.bassVolume).value);
+// Each track has its own volume, in whichever part its notes play.
+function volumeOf(track: number): number {
+  return trackVolumes.get(track) ?? DEFAULT_VOLUME;
 }
 function applyVolumes(): void {
-  trebleVoice.setVolume(volumeOf(trebleVoice));
-  bassVoice.setVolume(volumeOf(bassVoice));
-  ui.volumeLabel.textContent = `${Math.round(volumeOf(trebleVoice) * 100)}%`;
-  ui.bassVolumeLabel.textContent = `${Math.round(volumeOf(bassVoice) * 100)}%`;
+  for (const { track, voice } of voices.values()) voice.setVolume(volumeOf(track));
 }
-ui.volume.oninput = applyVolumes;
-ui.bassVolume.oninput = applyVolumes;
 // Hit window, ms on the slider, seconds in the judge.
 function hitWindow(): number {
   return Number(ui.hitWindow.value) / 1000;
@@ -440,55 +463,89 @@ function refreshPorts(): void {
   ui.midiIn.value = pick?.id ?? '';
   if ((pick?.id ?? null) !== current) midi.selectInput(pick?.id ?? null);
 
-  fillVoices(ui.output, 'output', trebleVoice, 'treble');
-  fillVoices(ui.bassOutput, 'bassOutput', bassVoice, 'bass');
+  renderTracks(); // the voice lists include the MIDI outputs
+  syncVoices();
 }
 
-// Sound choices for each part: sample sets, the synth, or a MIDI output. User sample sets
-// arrive asynchronously (read from disk); built-in sets until then.
-let sampleSets: SampleSet[] = [...BUILTIN_SETS];
+// ---------- voices ----------
 
-// A part's default: the first set meant for it, else the first set.
-function defaultVoice(part: 'treble' | 'bass'): string {
-  return `set:${(sampleSets.find(s => (s.part ?? 'treble') === part) ?? sampleSets[0]).id}`;
+// Each track picks its own sound: a sample set, the synth, or a MIDI output. "Auto" is the default
+// for the part the note plays in (the first set meant for the bass for the bass and chords, else
+// the right hand's). User sample sets arrive asynchronously (read from disk); built-in sets until
+// then. (State at the top.)
+function defaultVoice(part: VoicePart): string {
+  const want = part === 'bass' || part === 'chord' ? 'bass' : 'treble';
+  return `set:${(sampleSets.find(s => (s.part ?? 'treble') === want) ?? sampleSets[0]).id}`;
 }
 
-function fillVoices(select: HTMLSelectElement, key: string, voice: PartVoice, part: 'treble' | 'bass'): void {
-  const saved = getPref(key);
-  const want = select.value || (typeof saved === 'string' ? saved : defaultVoice(part));
-  select.replaceChildren();
-  for (const s of sampleSets) select.append(new Option(s.label, `set:${s.id}`));
-  select.append(new Option('신시', 'synth'));
-  for (const p of midi.outputs()) select.append(new Option(`MIDI: ${p.name}`, `midi:${p.id}`));
-  select.value = [...select.options].some(o => o.value === want) ? want : defaultVoice(part);
-  // A saved MIDI output only appears once MIDI is ready; switch to it then.
-  if (voice.value !== null && select.value !== voice.value) selectVoice(voice, select.value);
+function voiceChoices(): { label: string; value: string }[] {
+  return [
+    ...sampleSets.map(s => ({ label: s.label, value: `set:${s.id}` })),
+    { label: '신시', value: 'synth' },
+    ...midi.outputs().map(p => ({ label: `MIDI: ${p.name}`, value: `midi:${p.id}` })),
+  ];
 }
 
-function selectVoice(voice: PartVoice, value: string): void {
-  silence();
-  voice.choose(value, sampleSets, volumeOf(voice)).catch(e => {
+function fillVoiceOptions(select: HTMLSelectElement): void {
+  select.append(new Option('자동', AUTO));
+  for (const c of voiceChoices()) select.append(new Option(c.label, c.value));
+}
+
+// What a part of a track should sound with; a choice that's gone (an unplugged MIDI output) falls
+// back to the default.
+function wantedVoice(part: VoicePart, track: number): string {
+  const v = trackVoices.get(track);
+  return v && v !== AUTO && voiceChoices().some(c => c.value === v) ? v : defaultVoice(part);
+}
+
+function chooseVoice(voice: PartVoice, value: string, track: number): void {
+  voice.choose(value, sampleSets, volumeOf(track)).catch(e => {
     const set = sampleSets.find(s => `set:${s.id}` === value);
     alert(`음색을 불러오지 못했습니다: ${set?.label ?? value}\n${e}`);
   });
+}
+
+// A part's MIDI channel; a track playing along keeps the channel it was written on.
+function channelOf(part: VoicePart, track: number): number {
+  return part === 'other' ? song?.tracks.find(t => t.index === track)?.channel ?? 1 : midi.channels[part];
+}
+
+function voiceOf(part: VoicePart, track: number): PartVoice {
+  const key = `${part}:${track}`;
+  let entry = voices.get(key);
+  if (!entry) {
+    entry = { part, track, voice: new PartVoice(midi, () => channelOf(part, track)) };
+    entry.voice.setVolume(volumeOf(track));
+    voices.set(key, entry);
+  }
+  const want = wantedVoice(part, track);
+  if (entry.voice.value !== want) chooseVoice(entry.voice, want, track);
+  return entry.voice;
+}
+
+function route(part: VoicePart, track: number): Route {
+  return { sink: voiceOf(part, track).sink, channel: channelOf(part, track) };
+}
+
+// The player's own right-hand presses that match no note sound like the first right-hand track.
+function freeRoute(): Route {
+  return route('right', options?.tracks[0] ?? -1);
+}
+
+// Brings every voice in use up to its track's choice, silencing first if any changes.
+function syncVoices(): void {
+  const stale = [...voices.values()].filter(e => e.voice.value !== wantedVoice(e.part, e.track));
+  if (stale.length === 0) return;
+  silence();
+  for (const e of stale) chooseVoice(e.voice, wantedVoice(e.part, e.track), e.track);
 }
 
 ui.midiIn.onchange = () => {
   midi.selectInput(ui.midiIn.value || null);
   setPref('midiIn', ui.midiIn.selectedOptions[0]?.text ?? '');
 };
-ui.output.onchange = () => {
-  selectVoice(trebleVoice, ui.output.value);
-  setPref('output', ui.output.value);
-};
-ui.bassOutput.onchange = () => {
-  selectVoice(bassVoice, ui.bassOutput.value);
-  setPref('bassOutput', ui.bassOutput.value);
-};
 
 // Restore the remembered settings (song-specific options are left out on purpose).
-persist(ui.volume, 'volume', applyVolumes);
-persist(ui.bassVolume, 'bassVolume', applyVolumes);
 persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.latency, 'latency', applyLatency);
@@ -513,7 +570,11 @@ treble.endOf = n => {
 ui.followInput.addEventListener('change', silence);
 
 midi.onNoteOff = (part, note) => {
-  if (part === 'right' && inputHeld.delete(note)) trebleVoice.sink.noteOff(note, midi.channels.right);
+  const held = part === 'right' ? inputHeld.get(note) : undefined;
+  if (held) {
+    inputHeld.delete(note);
+    held.sink.noteOff(note, held.channel);
+  }
   const id = part === 'right' ? hitKeys.get(note) : undefined;
   if (id !== undefined) {
     hitKeys.delete(note);
@@ -558,15 +619,16 @@ function judgePress(note: number): void {
     startSound();
     const hit = result === 'hit' ? judge.lastHit : null;
     const taken = hit !== null && treble.claim(hit);
-    if (!taken) trebleVoice.sink.noteOn(note, hit !== null ? treble.notes[hit].velocity : FREE_VELOCITY, midi.channels.right);
-    inputHeld.add(note);
+    const r = hit !== null ? route('right', treble.notes[hit].track) : freeRoute();
+    if (!taken) r.sink.noteOn(note, hit !== null ? treble.notes[hit].velocity : FREE_VELOCITY, r.channel);
+    inputHeld.set(note, r);
     return;
   }
   // A chord the clock is waiting for stays quiet until it's played right, then each note sounds
   // for its written length. (Within the hit window notes already sound on arrival.)
   if (result === 'hit' && waitMode && waited && ui.sound.checked && judge.lastHit !== null) {
     startSound();
-    treble.play(trebleVoice.sink, treble.notes[judge.lastHit]);
+    treble.play(treble.notes[judge.lastHit]);
   }
 }
 midi.onPortsChanged = refreshPorts;
@@ -575,8 +637,6 @@ midi.onPortsChanged = refreshPorts;
 void userSampleSets().then(list => {
   sampleSets = [...list, ...BUILTIN_SETS];
   refreshPorts();
-  selectVoice(trebleVoice, ui.output.value);
-  selectVoice(bassVoice, ui.bassOutput.value);
   void midi.init().then(refreshPorts);
 });
 
@@ -620,10 +680,12 @@ function frame(now: number): void {
     // A missed chord falls silent, bass included, and both parts play on from it once it's
     // played right.
     if (waiter.tick(judge, transport, now)) {
-      treble.release(trebleVoice.sink);
+      treble.release();
       treble.seek(transport.time);
-      bass.release(bassVoice.sink);
+      bass.release();
       bass.seek(transport.time);
+      others.release();
+      others.seek(transport.time);
     }
   } else {
     transport.hold = null;
@@ -642,10 +704,13 @@ function frame(now: number): void {
   const t = transport.time;
 
   // Right-hand notes sound on arrival, except while wait mode holds the clock for a missed chord
-  // (see judgePress). The bass isn't judged; it stands still while the clock waits and comes in
+  // (see judgePress). The bass and the tracks playing along aren't judged; they stand still while the clock waits and come in
   // with the chord once that's played.
-  treble.update(trebleVoice.sink, t, ui.sound.checked && transport.playing && !transport.waiting);
-  if (!transport.waiting) bass.update(bassVoice.sink, t, ui.bassSound.checked && transport.playing);
+  treble.update(t, ui.sound.checked && transport.playing && !transport.waiting);
+  if (!transport.waiting) {
+    bass.update(t, ui.bassSound.checked && transport.playing);
+    others.update(t, transport.playing);
+  }
   // Notes count as missed only once a press played in time could no longer still be arriving.
   if (!waitMode && transport.playing) judge.update(t - latency() * transport.rate, transport.rate);
 
@@ -669,6 +734,7 @@ if (import.meta.env.DEV) {
       transport,
       judge: () => judge,
       sounding: () => ({ treble: treble.soundingNotes, bass: bass.soundingNotes }),
+      voices: () => Object.fromEntries([...voices].map(([key, e]) => [key, e.voice.value])),
     },
   });
 }

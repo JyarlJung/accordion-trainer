@@ -1,16 +1,16 @@
 import { MidiOutSink, SamplerSink, SynthSink, type NoteSink, type SampleSet } from './audio';
 import type { MidiIO } from './midi';
 
-// One part's sound: a sample set ('set:<id>'), the synth ('synth') or a MIDI output port
-// ('midi:<port id>'). Each part has its own, so the right hand and the bass can use different reeds.
+// One channel's sound: a sample set ('set:<id>'), the synth ('synth') or a MIDI output port
+// ('midi:<port id>'). The app keeps one per part and track, so each track can use its own reeds.
 export class PartVoice {
   sink: NoteSink;
   value: string | null = null;
   private readonly sampler = new SamplerSink();
   private readonly synth = new SynthSink();
 
-  // `channels` are the part's MIDI channels, primed with the bellows level on a MIDI output.
-  constructor(private readonly midi: MidiIO, private readonly channels: () => number[]) {
+  // `channel` is the voice's MIDI channel, primed with the bellows level on a MIDI output.
+  constructor(private readonly midi: MidiIO, private readonly channel: () => number) {
     this.sink = this.sampler;
   }
 
@@ -25,7 +25,7 @@ export class PartVoice {
     if (value === 'synth') {
       this.sink = this.synth;
     } else if (port) {
-      this.sink = new MidiOutSink(this.midi, port, level, this.channels());
+      this.sink = new MidiOutSink(this.midi, port, level, [this.channel()]);
     } else {
       this.sink = this.sampler;
       return this.sampler.load(sets.find(s => `set:${s.id}` === value)!);
@@ -40,7 +40,7 @@ export class PartVoice {
     else if (this.sink instanceof MidiOutSink) this.sink.prime();
   }
 
-  // The part's volume, 0..1: the app's own sounds, or the bellows level (CC11) on a MIDI output.
+  // The voice's volume, 0..1: the app's own sounds, or the bellows level (CC11) on a MIDI output.
   setVolume(v: number): void {
     this.sampler.setVolume(v);
     this.synth.setVolume(v);
