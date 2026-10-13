@@ -1,27 +1,42 @@
 # Accordion Trainer
 
-> Synthesia-style practice tool for the C-system button accordion (Roland FR-4xb). Korean UI.
+**English** | [한국어](README.ko.md)
 
-C시스템 버튼 아코디언 연습 프로그램입니다. MIDI 파일을 불러오면 실제 버튼 배치 위로 노트가 떨어지고, 악기를 연결하면 누르는 버튼을 실시간으로 보여줍니다.
+A falling-notes practice tool for the accordion, in the spirit of Synthesia. Open a MIDI file and the notes of both hands fall onto the buttons or keys you play them with: the treble on a C-system or B-system (bayan) button board or a piano keyboard, the bass on the Stradella board.
 
-## 실행
-[Releases](../../releases)에서 exe를 받아 실행합니다(설치 불필요). 같은 프로그램이 브라우저에서도 동작합니다(Chrome, Edge 등 Web MIDI를 지원하는 브라우저).
+## Practising with an electronic accordion
+Connect an electronic accordion such as a Roland V-Accordion over USB, and the app reads what you play:
+- **Practice mode** waits until you play each note — for the treble, the bass, or both. A chord counts once all its notes are held down together.
+- Every press is judged for timing, and the buttons you hold light up as you play.
+- Loop a few bars, slow the song down, or keep time with the metronome.
 
-## 음색
-소리는 SoundFont 신시사이저 [SpessaSynth](https://github.com/spessasus/spessasynth_lib)로 내고, 음색은 [GeneralUser GS](https://www.schristiancollins.com/generaluser) 사운드폰트(GM/GS 악기 287개)를 함께 넣어 배포합니다. 트랙 표에서 트랙마다 악기를 고르며, 기본은 Italian Accordion, 드럼 트랙(10번 채널)은 드럼 키트입니다. 펼친 툴바의 "베이스 옥타브"로 베이스와 코드 소리를 한 옥타브씩 올리거나 내릴 수 있습니다.
+## With any accordion
+No MIDI needed: follow the falling notes on any acoustic accordion, button or piano. You can also press the buttons and keys with the mouse.
 
-## 악기 연결 (FR-4xb)
-USB COMPUTER 단자로 연결하면 입력이 자동으로 잡힙니다. 악기 음색으로 곡을 들으려면 악기의 MIDI → Ext Seq → Acordion을 On으로 두고, 트랙 표에서 음색을 "MIDI: Roland Arranger"로 고르세요.
+## Trimming the treble
+When a song's treble part goes lower than you want to play with the right hand (a piano part, say), click a lane where the notes fall:
+- **Left-click**: that lane and every lower one leave the treble.
+- **Right-click**: the same notes move to the bass part instead, to play on the bass buttons and chords.
+- Click the same lane the same way again to undo.
 
-## 개발
+## Getting started
+Download the exe from [Releases](../../releases) and run it; there's nothing to install. The same app also runs in a browser with Web MIDI (Chrome, Edge). "Open the sample song" on the first screen opens Greensleeves to try it out.
+
+### Roland V-Accordion
+Connect the USB COMPUTER port and the input is picked up automatically. To hear songs on the instrument's own sounds, set MIDI → Ext Seq → Accordion to On on the instrument, and choose "MIDI: Roland Arranger" as the track's sound.
+
+## Sound
+Songs play through [SpessaSynth](https://github.com/spessasus/spessasynth_lib) with the [GeneralUser GS](https://www.schristiancollins.com/generaluser) SoundFont bundled (Italian Accordion by default).
+
+## Development
 ```
 npm install
-npm run app    # 개발 창
-npm run dist   # release/에 exe 생성
+npm run app    # development window
+npm run dist   # builds the exe into release/
 ```
 
-## 라이선스
-이 프로그램은 MIT 라이선스입니다. 함께 배포하는 구성 요소의 라이선스는 `public/licenses/`에 있습니다.
+## License
+MIT. Licences of the bundled components are in `public/licenses/`.
 - SpessaSynth (spessasynth_lib, spessasynth_core): Apache License 2.0, © Spessasus
 - GeneralUser GS: © S. Christian Collins, GeneralUser GS License v2.0
-- 샘플 곡 `public/demo/greensleeves.mid`: Greensleeves (Traditional), 아코디언 편곡 Ralf Axel Gehlert, [Mutopia Project #1265](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1265), 퍼블릭 도메인
+- Sample song `public/demo/greensleeves.mid`: Greensleeves (Traditional), arranged for accordion by Ralf Axel Gehlert, [Mutopia Project #1265](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1265), public domain
