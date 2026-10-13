@@ -1,5 +1,7 @@
 import './style.css';
-import layoutJson from '../layouts/fr4xb-c-griff-europe.json';
+import cGriffJson from '../layouts/fr4xb-c-griff-europe.json';
+import bGriffJson from '../layouts/fr4xb-b-griff.json';
+import pianoJson from '../layouts/piano-88.json';
 import bassJson from '../layouts/fr4xb-stradella-2row.json';
 import { BassLayout, type BassLayoutDef } from './core/bassLayout';
 import { Layout, noteName, type LayoutDef } from './core/layout';
@@ -43,6 +45,9 @@ const ui = {
   chChord: $<HTMLSelectElement>('chChord'),
   lastCh: $('lastCh'),
   helpers: $<HTMLInputElement>('helpers'),
+  rightLayout: $<HTMLSelectElement>('rightLayout'),
+  pianoLow: $<HTMLInputElement>('pianoLow'),
+  pianoHigh: $<HTMLInputElement>('pianoHigh'),
   mirror: $<HTMLInputElement>('mirror'),
   mirrorX: $<HTMLInputElement>('mirrorX'),
   noteNames: $<HTMLInputElement>('noteNames'),
@@ -59,7 +64,13 @@ const ui = {
   rowGapLabel: $('rowGapLabel'),
 };
 
-const layout = new Layout(layoutJson as LayoutDef);
+// Right-hand button layouts, picked in the settings.
+const layouts: Record<string, Layout> = {
+  c: new Layout(cGriffJson as LayoutDef),
+  b: new Layout(bGriffJson as LayoutDef),
+  piano: new Layout(pianoJson as LayoutDef),
+};
+let layout = layouts.c;
 const transport = new Transport();
 const midi = new MidiIO();
 const bassLayout = new BassLayout(bassJson as BassLayoutDef);
@@ -103,6 +114,8 @@ let loop: { a: number; b: number } | null = null;
 function setSong(s: Song): void {
   song = s;
   options = defaultOptions();
+  const first = s.tracks.find(t => t.channel !== 10);
+  if (first) options.tracks = [first.index]; // the first (non-drum) track starts as the right hand
   trackVoices.clear();
   trackVolumes.clear();
   mutedTracks.clear();
@@ -138,7 +151,7 @@ function rebuild(t = transport.time): void {
   treble.notes = extractNotes(song, options);
   bass.notes = extractBass(song, options);
   others.notes = extractOthers(song, options);
-  judge = new Judge(treble.notes, n => layout.primary(n) !== undefined);
+  judge = new Judge(treble.notes, n => layout.playable(n));
   judge.windowSec = hitWindow();
   bassJudge = new BassJudge(bass.notes, bassLayout);
   bassJudge.windowSec = hitWindow();
@@ -206,7 +219,7 @@ function renderTracks(): void {
     volume.type = 'range';
     volume.min = '0';
     volume.max = '1';
-    volume.step = '0.05';
+    volume.step = '0.1';
     volume.value = String(volumeOf(t.index));
     const volumeTitle = () => `볼륨 ${Math.round(Number(volume.value) * 100)}%`;
     volume.title = volumeTitle();
@@ -241,10 +254,41 @@ function cutAt(e: MouseEvent, toBass: boolean): void {
   rebuild();
 }
 canvas.addEventListener('click', e => cutAt(e, false));
-canvas.addEventListener('contextmenu', e => cutAt(e, true));
-canvas.addEventListener('mousemove', e => {
-  canvas.style.cursor = song && stage.laneAt(e.offsetX, e.offsetY) !== null ? 'pointer' : '';
+canvas.addEventListener('contextmenu', e => {
+  if (stage.buttonAt(e.offsetX, e.offsetY)) e.preventDefault(); // the boards have no right-click
+  else cutAt(e, true);
 });
+canvas.addEventListener('mousemove', e => {
+  const x = e.offsetX, y = e.offsetY;
+  canvas.style.cursor = stage.buttonAt(x, y) || (song && stage.laneAt(x, y) !== null) ? 'pointer' : '';
+});
+
+// Keys and buttons on the boards play like the instrument's: a press goes in as MIDI input, so
+// everything works with the mouse too, practice mode included, and it sounds.
+let mouseHeld: { part: Part; notes: number[] } | null = null;
+function mouseRelease(): void {
+  if (!mouseHeld) return;
+  for (const n of mouseHeld.notes) midi.simulate(n, false, midi.channels[mouseHeld.part]);
+  mouseHeld = null;
+}
+canvas.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const hit = stage.buttonAt(e.offsetX, e.offsetY);
+  if (!hit) return;
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  mouseRelease();
+  mouseHeld = hit;
+  for (const n of hit.notes) {
+    midi.simulate(n, true, midi.channels[hit.part]);
+    // The instrument sounds by itself; a mouse press has the app sound it, unless playing by my
+    // keys already does. Letting go stops it like any input key.
+    if (inputHeld.has(`${hit.part}:${n}`)) continue;
+    startSound();
+    holdKey(hit.part, n, [playFree(hit.part, n)]);
+  }
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) canvas.addEventListener(type, mouseRelease);
 for (let t = -12; t <= 12; t++) ui.transpose.append(new Option(t > 0 ? `+${t}` : String(t), String(t)));
 ui.transpose.value = '0';
 ui.transpose.onchange = () => {
@@ -546,6 +590,44 @@ function applyBassOctave(): void {
 }
 ui.bassOctave.addEventListener('change', applyBassOctave);
 persist(ui.bassOctave, 'bassOctave');
+
+function applyRightLayout(): void {
+  layout = layouts[ui.rightLayout.value] ?? layouts.c;
+  stage.setLayout(layout);
+  // Row options for the button boards, the played range for the piano.
+  for (const el of document.querySelectorAll<HTMLElement>('.button-only')) el.hidden = layout.piano;
+  for (const el of document.querySelectorAll<HTMLElement>('.piano-only')) el.hidden = !layout.piano;
+  rebuild(); // judging asks the layout which notes have a button
+}
+// The piano's played range: one slider with two knobs, which can't pass each other.
+function applyPianoRange(moved?: HTMLInputElement): void {
+  let low = Number(ui.pianoLow.value), high = Number(ui.pianoHigh.value);
+  if (low > high) {
+    if (moved === ui.pianoHigh) high = low;
+    else low = high;
+    ui.pianoLow.value = String(low);
+    ui.pianoHigh.value = String(high);
+  }
+  layouts.piano.setPlayRange(low, high);
+  $('pianoLowLabel').textContent = noteName(low);
+  $('pianoHighLabel').textContent = noteName(high);
+  const min = Number(ui.pianoLow.min), span = Number(ui.pianoLow.max) - min;
+  Object.assign($('pianoRangeFill').style, { left: `${((low - min) / span) * 100}%`, right: `${100 - ((high - min) / span) * 100}%` });
+  // The knob moved last stays on top, so two knobs at one spot can still be pulled apart.
+  ui.pianoLow.style.zIndex = moved === ui.pianoLow ? '2' : '1';
+  ui.pianoHigh.style.zIndex = moved === ui.pianoLow ? '1' : '2';
+}
+persist(ui.pianoLow, 'pianoLow');
+persist(ui.pianoHigh, 'pianoHigh', applyPianoRange);
+for (const el of [ui.pianoLow, ui.pianoHigh]) {
+  el.addEventListener('input', () => {
+    applyPianoRange(el);
+    if (layout.piano) rebuild(); // judging asks which notes have a key
+  });
+}
+
+persist(ui.rightLayout, 'rightLayout', applyRightLayout);
+ui.rightLayout.addEventListener('change', applyRightLayout);
 
 // ---------- voices ----------
 

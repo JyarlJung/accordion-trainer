@@ -4,7 +4,7 @@
   --line: #2e2e38;
   --text: #e6e6ea;
   --muted: #9a9aa5;
-  --accent: #00897b;
+  --accent: hsl(258, 55%, 55%); /* the right-hand notes' violet */
   color-scheme: dark;
 }
 
@@ -38,7 +38,9 @@ header {
 /* A category: its bold title, then its options. */
 .cat { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .cat-title { font-weight: 700; white-space: nowrap; }
-.practice-only.off { opacity: 0.4; pointer-events: none; } /* options that only apply in practice mode */
+/* Options that only apply in practice mode, or to button boards. */
+.practice-only.off { opacity: 0.4; pointer-events: none; }
+.button-only[hidden], .piano-only[hidden] { display: none; } /* options for one kind of board */
 #time { white-space: nowrap; }
 .group[hidden], .bar[hidden] { display: none; }
 
@@ -69,6 +71,35 @@ header {
 .menu-group { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .menu > * + * { border-top: 1px solid var(--line); padding-top: 14px; }
 .menu-foot button { width: 100%; }
+
+/* One slider with two knobs (the piano's played range): two range inputs over one track, each
+   taking pointer input only on its knob. */
+.range-note { min-width: 2.6em; text-align: center; }
+.dual-range { position: relative; display: inline-block; width: 200px; height: 18px; }
+.dual-track, .dual-fill { position: absolute; top: 7px; height: 4px; border-radius: 2px; }
+.dual-track { left: 0; right: 0; background: #3a3a46; }
+.dual-fill { background: var(--accent); }
+.dual-range input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dual-range input::-webkit-slider-runnable-track { background: none; }
+.dual-range input::-webkit-slider-thumb {
+  pointer-events: auto;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e6e6ea;
+  border: 2px solid var(--accent);
+  cursor: pointer;
+}
 
 .muted { color: var(--muted); }
 .mono { font-variant-numeric: tabular-nums; }
@@ -118,7 +149,7 @@ main { flex: 1; min-height: 0; position: relative; }
   font-size: 12px;
   overflow: hidden;
 }
-.track-head, .track-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 110px 22px 20px 20px; align-items: center; gap: 4px; }
+.track-head, .track-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 96px 40px 40px 40px; align-items: center; gap: 4px; }
 .track-head { color: var(--muted); }
 .track-head > :not(:first-child), .track-row > input { justify-self: center; margin: 0; }
 .track-row select { width: 100%; min-width: 0; padding: 1px 4px; }

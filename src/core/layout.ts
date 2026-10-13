@@ -11,8 +11,10 @@ export interface RowDef {
 
 export interface LayoutDef {
   name: string;
-  semitonesPerButton: number;
+  semitonesPerButton: number; // a piano keyboard keeps 3, so it's sized like the button boards
   rows: RowDef[];
+  // A piano keyboard instead of button rows: keys low-high shown, playLow-playHigh played.
+  keyboard?: { low: number; high: number; playLow: number; playHigh: number };
 }
 
 export interface KeyButton {
@@ -40,13 +42,21 @@ export class Layout {
   readonly rows: RowDef[];
   readonly minNote: number;
   readonly maxNote: number;
+  readonly piano: boolean; // piano keys, one per semitone, all on "row" 1
+  private playRange = { low: 0, high: 127 };
   private readonly byNote = new Map<number, KeyButton[]>();
 
   constructor(readonly def: LayoutDef) {
-    this.rows = [...def.rows].sort((a, b) => a.row - b.row);
+    const kb = def.keyboard;
+    this.piano = kb !== undefined;
+    if (kb) this.playRange = { low: kb.playLow, high: kb.playHigh };
+    this.rows = kb
+      ? [{ row: 1, start: kb.low, count: kb.high - kb.low + 1, role: 'main', yOffset: 0 }]
+      : [...def.rows].sort((a, b) => a.row - b.row);
+    const step = kb ? 1 : def.semitonesPerButton;
     for (const r of this.rows) {
       for (let i = 0; i < r.count; i++) {
-        const note = r.start + i * def.semitonesPerButton;
+        const note = r.start + i * step;
         const b: KeyButton = {
           id: `${r.row}-${i}`, row: r.row, index: i, note, role: r.role,
           y: i + r.yOffset, black: isBlack(note),
@@ -70,6 +80,16 @@ export class Layout {
     return this.byNote.get(note) ?? [];
   }
 
+  // Whether the instrument has the note: a button for it, or a key in the played range.
+  playable(note: number): boolean {
+    return this.byNote.has(note) && (!this.piano || (note >= this.playRange.low && note <= this.playRange.high));
+  }
+
+  // The piano keys played (the rest are shown for reference only).
+  setPlayRange(low: number, high: number): void {
+    this.playRange = { low, high };
+  }
+
   primary(note: number): KeyButton | undefined {
     return this.byNote.get(note)?.[0];
   }
@@ -84,6 +104,7 @@ export class Layout {
   // How far a note's lane moves along the rows (in buttons) per row step. On the C-system this is
   // 1/6 for every row, which makes the lanes straight diagonals that never share a pitch.
   get rowShift(): number {
+    if (this.piano) return 0; // piano lanes fall straight
     return this.laneU(this.minNote, 2) - this.laneU(this.minNote, 1);
   }
 }

@@ -25,12 +25,22 @@ export interface RollState {
 const NOTE_ALPHA = 0.5;
 
 // Background: one diagonal lane per semitone (running on to its button), and the judgment line.
-export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, s: RollState): void {
-  const y0 = geo.rollTop, y1 = geo.lanesBottom, w = geo.lane;
+export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
+  const y0 = geo.rollTop, y1 = geo.lanesBottom;
   for (let note = geo.lo; note <= geo.hi; note++) {
-    const a = geo.laneX(note, y0), b = geo.laneX(note, y1);
+    const a = geo.laneX(note, y0), b = geo.laneX(note, y1), w = geo.laneW(note);
     if (isBlack(note)) {
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.moveTo(a - w / 2, y0);
+      ctx.lineTo(a + w / 2, y0);
+      ctx.lineTo(b + w / 2, y1);
+      ctx.lineTo(b - w / 2, y1);
+      ctx.fill();
+    }
+    // Lanes of piano keys beyond the played range, darkened.
+    if (!layout.playable(note)) {
+      ctx.fillStyle = 'rgba(8,8,12,0.35)';
       ctx.beginPath();
       ctx.moveTo(a - w / 2, y0);
       ctx.lineTo(a + w / 2, y0);
@@ -91,7 +101,7 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, s: RollS
   // Cut-away lanes, dimmed down through the board; tinted teal when they go to the bass.
   if (s.cut) {
     for (let note = geo.lo; note <= Math.min(geo.hi, s.cut.note); note++) {
-      const a = geo.laneX(note, y0), b = geo.laneX(note, y1);
+      const a = geo.laneX(note, y0), b = geo.laneX(note, y1), w = geo.laneW(note);
       ctx.beginPath();
       ctx.moveTo(a - w / 2, y0);
       ctx.lineTo(a + w / 2, y0);
@@ -119,7 +129,6 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, s: RollS
 // bottom edge reaches the shared judgment line; its lane then leads on to its button.
 export function drawNotes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
   const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;
-  const half = geo.radius;
   ctx.font = `600 ${Math.max(8, Math.min(11, geo.lane * 0.5))}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -132,9 +141,9 @@ export function drawNotes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: 
     // A small gap keeps repeated notes of the same pitch visibly separate.
     const top = Math.max(geo.rollTop, land - (n.time + n.duration - s.time) * pps + 2);
     if (top >= bottom || bottom < geo.rollTop) continue;
-    const xb = geo.laneX(n.note, bottom), xt = geo.laneX(n.note, top);
+    const xb = geo.laneX(n.note, bottom), xt = geo.laneX(n.note, top), half = geo.noteHalf(n.note);
     const state = s.judge.state[n.id];
-    const color = state === 'hit' && !s.letGo.has(n.id) ? HIT : b.role === 'main' ? ROW_COLORS[b.row] : HELPER_ONLY;
+    const color = state === 'hit' && !s.letGo.has(n.id) ? HIT : layout.piano ? ROW_COLORS[b.black ? 3 : 1] : b.role === 'main' ? ROW_COLORS[b.row] : HELPER_ONLY;
     const faded = state === 'skipped';
 
     ctx.globalAlpha = faded ? NOTE_ALPHA * 0.4 : NOTE_ALPHA;

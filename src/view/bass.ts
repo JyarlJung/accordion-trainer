@@ -2,8 +2,9 @@ import type { BassLayout, BassRow } from '../core/bassLayout';
 import type { Geometry } from './geometry';
 import { drawButton, type Mark } from './grid';
 
+// Chord rows only: the single-note rows (counter-bass, bass) speak for themselves.
 const ROW_TITLES: Record<BassRow, string> = {
-  counter: '카', bass: '베', major: '장', minor: '단', seventh: '7', dim: '감',
+  counter: '', bass: '', major: 'Maj', minor: 'min', seventh: '7th', dim: 'dim',
 };
 
 export function drawBass(ctx: CanvasRenderingContext2D, geo: Geometry, layout: BassLayout, marks: Map<string, Mark>): void {

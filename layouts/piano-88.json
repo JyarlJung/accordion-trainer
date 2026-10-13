@@ -1,0 +1,6 @@
+{
+  "name": "Piano keyboard, 88 keys shown, 41 played (F3-A6)",
+  "semitonesPerButton": 3,
+  "keyboard": { "low": 21, "high": 108, "playLow": 53, "playHigh": 93 },
+  "rows": []
+}

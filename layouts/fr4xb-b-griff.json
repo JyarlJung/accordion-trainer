@@ -1,0 +1,11 @@
+{
+  "name": "B-Griff (Bayan), on the FR-4xb's C-Griff button grid",
+  "semitonesPerButton": 3,
+  "rows": [
+    { "row": 1, "start": 50, "count": 18, "role": "main", "yOffset": 0.5 },
+    { "row": 2, "start": 49, "count": 19, "role": "main", "yOffset": 0 },
+    { "row": 3, "start": 51, "count": 18, "role": "main", "yOffset": 0.5 },
+    { "row": 4, "start": 50, "count": 19, "role": "helper", "yOffset": 0, "duplicateOf": 1 },
+    { "row": 5, "start": 52, "count": 18, "role": "helper", "yOffset": 0.5, "duplicateOf": 2 }
+  ]
+}

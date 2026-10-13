@@ -36,6 +36,9 @@ const CHORD_SHAPES: Record<ChordRow, number[][]> = {
   dim: [[0, 3, 9], [0, 3, 6, 9]], // dim7, often without the 5th
 };
 
+const BASS_BASE = 36; // C2: bass and counter-bass notes sent from a button press
+const CHORD_BASE = 48; // C3: roots of chord notes sent from a button press
+
 export class BassLayout {
   readonly buttons: BassButton[] = [];
   readonly columns: number;
@@ -70,6 +73,14 @@ export class BassLayout {
     return this.buttons
       .filter(b => b.row === 'bass' && b.col >= this.centerCol - 6 && b.col < this.centerCol + 6)
       .map(b => b.root);
+  }
+
+  // The notes a button sends, as on the instrument: one note for a bass or counter-bass button
+  // (an octave of its own: the bass has none), the chord's notes for a chord button.
+  notesOf(b: BassButton): number[] {
+    if (b.row === 'bass') return [BASS_BASE + b.root];
+    if (b.row === 'counter') return [BASS_BASE + ((b.root + 4) % 12)];
+    return CHORD_SHAPES[b.row][0].map(i => CHORD_BASE + b.root + i);
   }
 
   // Every button the same as b: same row and root (the board repeats its end columns).

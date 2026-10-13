@@ -1,5 +1,5 @@
 import type { BassButton, BassLayout } from '../core/bassLayout';
-import type { KeyButton, Layout } from '../core/layout';
+import { isBlack, type KeyButton, type Layout } from '../core/layout';
 
 export interface GeometryOptions {
   flipY: boolean; // reverse the row order of both boards
@@ -19,10 +19,16 @@ const BASS_LANES = 1.1; // bass button pitch in treble lanes: about treble-butto
 const BASS_ROW_GAP = 0.9;
 const BASS_MAX_WIDTH = 0.55; // cap the bass board at this share of the width, so zooming the treble doesn't inflate it
 const MAX_PITCH = 140;
-const BASS_LABEL = 14; // bass row titles, this far outside the bass board, px
-const SIDE_GAP = 32; // between the bass board and the area beside it (room for the row titles), px
+const BASS_LABEL = 20; // bass row titles, this far outside the bass board, px
+const SIDE_GAP = 44; // between the bass board and the area beside it (room for the row titles), px
 const TRACKS_W = 490; // track table, px
 const PANEL_GAP = 12;
+// Piano keyboard: as tall as button rows 1-3 at a row gap of 0.50, in button pitches.
+const KEYS_UNITS = 2 * 0.5 + (2 * BUTTON) / 3;
+const KEY_ASPECT = 6.5; // longest a white key gets, in (average) key widths (a real piano's is about 6.3)
+const KEY_MIN_ASPECT = 3.2; // ... and shortest: wide screens leave space at the sides instead
+const WHITE_PER_SEMITONE = 12 / 7; // a white key's average width, in semitone lanes
+const BLACK_H = 0.62; // black key length, in white key lengths
 
 export interface Box {
   left: number;
@@ -64,6 +70,8 @@ export class Geometry {
   readonly bassRoll: Box; // the bass part's roll, beside the bass board
   readonly rhOrder: number[]; // treble row numbers from top to bottom
   readonly bassOrder: number[]; // bass row indices from top to bottom
+  readonly keysTop: number; // piano keyboard: top edge of the keys
+  readonly keysH: number; // ... and their length
   private readonly rhX0: number;
   private readonly shear: number; // lane x shift per pixel of y
   private readonly rowStep: number; // y distance from one row number to the next (negative when flipped)
@@ -84,7 +92,7 @@ export class Geometry {
     const rhSpan = (this.hi - this.lo) / semis + 1;
     const bassSpan = bass.columns + this.bassSlant * (this.bassRows - 1);
     const g = opts.rowGap;
-    const rhUnits = (opts.rows.length - 1) * g + (2 * BUTTON) / semis;
+    const rhUnits = layout.piano ? KEYS_UNITS : (opts.rows.length - 1) * g + (2 * BUTTON) / semis;
     const bassScale = BASS_LANES / semis; // bass pitch relative to the treble pitch
     const bassUnits = ((this.bassRows - 1) * BASS_ROW_GAP + 0.92) * bassScale;
     const stack = rhUnits + BOARD_GAP + METER + BOARD_GAP + bassUnits;
@@ -93,15 +101,25 @@ export class Geometry {
     this.right = width - PAD_X;
     this.labelX = PAD_X + LABEL / 2;
     const availW = this.right - this.left, availH = height - 2 * PAD_Y;
-    // Lanes lean by rowShift buttons per row, so the roll's height adds sideways extent:
-    // width = span * p + rollHeight * k, with rollHeight = availH - stack * p.
-    const k = Math.abs(layout.rowShift) / g;
-    const byWidth = Math.min((availW - availH * k) / (rhSpan - stack * k), availW / (bassSpan * bassScale));
     const byHeight = (availH * (1 - ROLL_MIN)) / stack;
-    this.pitch = Math.max(8, Math.min(byWidth > 0 ? byWidth : 8, byHeight, MAX_PITCH));
+    const bassByWidth = availW / (bassSpan * bassScale);
+    let semitone = 0;
+    if (layout.piano) {
+      // The keys' length follows the height; their width the screen, within a key's proportions.
+      // Lanes are one semitone each (one more for the half lanes the end keys stick out).
+      const p0 = Math.max(8, Math.min(byHeight, bassByWidth, MAX_PITCH));
+      semitone = Math.min(availW / (this.hi - this.lo + 2), (KEYS_UNITS * p0) / KEY_MIN_ASPECT / WHITE_PER_SEMITONE);
+      this.pitch = Math.max(8, Math.min(p0, (KEY_ASPECT * semitone * WHITE_PER_SEMITONE) / KEYS_UNITS));
+    } else {
+      // Lanes lean by rowShift buttons per row, so the roll's height adds sideways extent:
+      // width = span * p + rollHeight * k, with rollHeight = availH - stack * p.
+      const k = Math.abs(layout.rowShift) / g;
+      const byWidth = Math.min((availW - availH * k) / (rhSpan - stack * k), bassByWidth);
+      this.pitch = Math.max(8, Math.min(byWidth > 0 ? byWidth : 8, byHeight, MAX_PITCH));
+    }
     const p = this.pitch;
-    this.lane = p / semis;
-    this.radius = this.lane * BUTTON;
+    this.lane = layout.piano ? semitone : p / semis;
+    this.radius = (p / semis) * BUTTON;
     this.rowGap = p * g;
     this.bassPitch = Math.min(p * bassScale, (availW * BASS_MAX_WIDTH) / bassSpan);
     this.bassRadius = this.bassPitch * 0.46;
@@ -111,29 +129,41 @@ export class Geometry {
     this.bassRowsTop = height - PAD_Y - ((this.bassRows - 1) * this.bassRowGap + this.bassRadius * 2);
     this.meterH = p * METER;
     this.meterY = this.bassRowsTop - p * BOARD_GAP - this.meterH;
-    this.rhRowsTop = this.meterY - p * BOARD_GAP - ((opts.rows.length - 1) * this.rowGap + this.radius * 2);
+    this.keysH = layout.piano ? KEYS_UNITS * p : 0;
+    this.rhRowsTop = this.meterY - p * BOARD_GAP - (layout.piano ? this.keysH : (opts.rows.length - 1) * this.rowGap + this.radius * 2);
+    this.keysTop = this.rhRowsTop;
 
     // Default: treble row 1 on top (next to the roll), counter-bass on top (next to the bellows).
-    this.rhOrder = layout.rows.map(r => r.row).filter(r => opts.rows.includes(r));
+    this.rhOrder = layout.rows.map(r => r.row).filter(r => layout.piano || opts.rows.includes(r));
     this.bassOrder = bass.def.rows.map((_, i) => i);
     if (opts.flipY) {
       this.rhOrder.reverse();
       this.bassOrder.reverse();
     }
-    this.rhOrder.forEach((row, i) => this.rhLine.set(row, this.rhRowsTop + this.radius + i * this.rowGap));
+    if (layout.piano) this.rhLine.set(1, this.keysTop + this.keysH / 2);
+    else this.rhOrder.forEach((row, i) => this.rhLine.set(row, this.rhRowsTop + this.radius + i * this.rowGap));
     this.bassOrder.forEach((r, i) => this.bassLine.set(r, this.bassRowsTop + this.bassRadius + i * this.bassRowGap));
 
-    const mainLines = layout.rows.filter(r => r.role === 'main').map(r => this.landY(r.row));
     this.rollTop = PAD_Y;
-    this.rollBottom = Math.min(...this.rhOrder.map(r => this.landY(r)));
-    this.lanesBottom = Math.max(...mainLines) + this.radius * 2;
-    this.rowStep = this.rowLineY(2) - this.rowLineY(1);
-    this.shear = (layout.rowShift * p) / this.rowStep;
+    if (layout.piano) {
+      // Notes land on the top edge of the keys and fall straight; the keyboard is centred.
+      this.rollBottom = this.keysTop;
+      this.lanesBottom = this.keysTop + this.keysH;
+      this.rowStep = 1;
+      this.shear = 0;
+      this.rhX0 = this.left + (availW - (this.hi - this.lo + 1) * semitone) / 2;
+    } else {
+      const mainLines = layout.rows.filter(r => r.role === 'main').map(r => this.landY(r.row));
+      this.rollBottom = Math.min(...this.rhOrder.map(r => this.landY(r)));
+      this.lanesBottom = Math.max(...mainLines) + this.radius * 2;
+      this.rowStep = this.rowLineY(2) - this.rowLineY(1);
+      this.shear = (layout.rowShift * p) / this.rowStep;
 
-    // Centre the whole lane fan (boards plus the leaning roll) horizontally.
-    const xs = [this.lo, this.hi].flatMap(n => [this.rollTop, this.lanesBottom].map(y => this.laneXFrom(0, n, y)));
-    const extent = Math.max(...xs) - Math.min(...xs) + this.lane;
-    this.rhX0 = this.left + (availW - extent) / 2 + this.lane / 2 - Math.min(...xs);
+      // Centre the whole lane fan (boards plus the leaning roll) horizontally.
+      const xs = [this.lo, this.hi].flatMap(n => [this.rollTop, this.lanesBottom].map(y => this.laneXFrom(0, n, y)));
+      const extent = Math.max(...xs) - Math.min(...xs) + this.lane;
+      this.rhX0 = this.left + (availW - extent) / 2 + this.lane / 2 - Math.min(...xs);
+    }
     this.bassX0 = this.right - bassSpan * this.bassPitch + this.bassPitch / 2;
 
     // Boxes in screen space (after mirroring).
@@ -159,7 +189,35 @@ export class Geometry {
     return this.opts.flipX ? this.left + this.right - x : x;
   }
 
+  // The keyboard as in a DAW's piano roll: every semitone gets a lane of the same width, as on
+  // the button boards. A black key is exactly its lane; a white key's front reaches halfway
+  // into each black neighbour's lane (so C, E, F and B are 1.5 lanes wide, D, G and A 2), and
+  // behind the black keys only its own lane shows.
+  private keySpan(note: number): [number, number] {
+    const start = (note - this.lo) * this.lane;
+    if (isBlack(note)) return [start, start + this.lane];
+    return [start - (isBlack(note - 1) ? this.lane / 2 : 0), start + this.lane + (isBlack(note + 1) ? this.lane / 2 : 0)];
+  }
+
+  // Width of a note's lane: one semitone, on the button boards and the keyboard alike.
+  laneW(_note: number): number {
+    return this.lane;
+  }
+
+  // Half the width of a falling note.
+  noteHalf(_note: number): number {
+    return this.layout.piano ? this.lane * BUTTON : this.radius;
+  }
+
+  // A piano key's rectangle on screen (a white key's front part; the black keys cover the rest).
+  keyRect(note: number): Box {
+    const [a, b] = this.keySpan(note).map(x => this.fx(this.rhX0 + x));
+    const h = isBlack(note) ? this.keysH * BLACK_H : this.keysH;
+    return { left: Math.min(a, b), right: Math.max(a, b), top: this.keysTop, bottom: this.keysTop + h };
+  }
+
   private laneXFrom(x0: number, note: number, y: number): number {
+    if (this.layout.piano) return x0 + (note - this.lo + 0.5) * this.lane;
     const b = this.layout.primary(note);
     const row = b?.row ?? this.layout.rows[0].row;
     // Use where the row would be even if it's folded away, so lanes don't depend on what's shown.
@@ -190,6 +248,11 @@ export class Geometry {
   }
 
   pos(b: KeyButton): { x: number; y: number } {
+    if (this.layout.piano) {
+      // Near the key's front end, where the hand meets it.
+      const r = this.keyRect(b.note);
+      return { x: (r.left + r.right) / 2, y: r.bottom - Math.min(r.bottom - r.top, this.lane * 1.2) / 2 };
+    }
     return { x: this.fx(this.rhX0 + b.y * this.pitch), y: this.rowLineY(b.row) };
   }
 

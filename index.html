@@ -53,15 +53,34 @@
               </span>
             </div>
             <div class="menu-group">
+              <span class="cat-title">건반 배열</span>
+              <label title="오른손 버튼 배열. B 시스템은 C 시스템의 1열과 3열을 맞바꾼 배열로, 화면의 레인이 반대쪽으로 기웁니다">오른손 <select id="rightLayout">
+                <option value="c">C 시스템</option>
+                <option value="b">B 시스템 (바얀)</option>
+                <option value="piano">피아노 건반</option>
+              </select></label>
+              <label class="button-only"><input type="checkbox" id="helpers" /> 4·5열 표시</label>
+              <span class="group button-only">
+                <label title="오른손 줄 사이 간격(버튼 간격 대비). 실제 버튼 배치는 약 0.87(√3/2)입니다">줄 간격 <input type="range" id="rowGap" min="0.35" max="0.9" step="0.01" value="0.5" /></label>
+                <span id="rowGapLabel" class="mono">0.50</span>
+              </span>
+              <span class="group piano-only" title="칠 수 있는 건반의 범위. 화면에는 88건반이 모두 보이고, 범위 밖의 건반은 흐리게 표시되며 판정에서 빠집니다">
+                범위 지정
+                <span id="pianoLowLabel" class="mono range-note">F3</span>
+                <span class="dual-range">
+                  <span class="dual-track"></span>
+                  <span id="pianoRangeFill" class="dual-fill"></span>
+                  <input type="range" id="pianoLow" min="21" max="108" step="1" value="53" />
+                  <input type="range" id="pianoHigh" min="21" max="108" step="1" value="93" />
+                </span>
+                <span id="pianoHighLabel" class="mono range-note">A6</span>
+              </span>
+            </div>
+            <div class="menu-group">
               <span class="cat-title">화면</span>
               <label title="곧 칠 버튼을 건반에 미리 보여 줍니다"><input type="checkbox" id="upcoming" checked /> 다음 누를 버튼 표시</label>
               <label><input type="checkbox" id="mirror" /> 위아래 반전</label>
               <label><input type="checkbox" id="mirrorX" /> 좌우 반전</label>
-              <label><input type="checkbox" id="helpers" /> 4·5열 표시</label>
-              <span class="group">
-                <label title="오른손 줄 사이 간격(버튼 간격 대비). 실제 버튼 배치는 약 0.87(√3/2)입니다">줄 간격 <input type="range" id="rowGap" min="0.35" max="0.9" step="0.01" value="0.5" /></label>
-                <span id="rowGapLabel" class="mono">0.50</span>
-              </span>
               <label><input type="checkbox" id="noteNames" checked /> 노트에 음 이름 표시</label>
               <label title="베이스 롤 레인을 C C# D … 순서로 (끄면 보드와 같은 5도 순서)"><input type="checkbox" id="bassChromatic" /> 베이스 반음 순서</label>
             </div>
@@ -103,7 +122,7 @@
           <span id="songName"></span>
           <button id="openOther" title="다른 MIDI 파일을 엽니다 (파일을 끌어다 놓아도 됩니다)">다른 곡 열기</button>
         </div>
-        <div class="track-head"><span>트랙</span><span title="트랙의 음을 낼 악기 (GeneralUser GS 사운드폰트) 또는 MIDI 출력">음색</span><span>볼륨</span><span title="음소거">끔</span><span title="오른손">오</span><span title="베이스">베</span></div>
+        <div class="track-head"><span>트랙</span><span title="트랙의 음을 낼 악기 (GeneralUser GS 사운드폰트) 또는 MIDI 출력">음색</span><span>볼륨</span><span>음소거</span><span title="이 트랙을 오른손 파트로">오른손</span><span title="이 트랙을 베이스 파트로">베이스</span></div>
         <div id="trackRows" class="track-rows"></div>
         <label class="drop-zone">
           <span class="btn">MIDI 파일 열기</span>

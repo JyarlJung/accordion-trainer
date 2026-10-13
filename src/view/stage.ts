@@ -30,7 +30,6 @@ export class Stage {
   private geo: Geometry | null = null;
   private geoKey = '';
   private flashes: { note: number; kind: HitResult; at: number }[] = [];
-  private rowsFor: unknown = null;
   private onsetsFor: unknown = null;
   // When each note due now was first shown (real ms), for its arrival burst. Real time, so a burst
   // still settles while practice mode holds the clock on a missed note.
@@ -38,12 +37,11 @@ export class Stage {
   private readonly burstsShown = new Set<string>();
   private frameMs = 0;
   private onsets: { time: number; end: number; notes: BassNote[] }[] = [];
-  private neededRows = new Set<number>();
   onLayout?: (geo: Geometry) => void; // called whenever the board is laid out anew
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly layout: Layout,
+    private layout: Layout,
     private readonly bass: BassLayout,
   ) {
     // Low-latency canvas: presented without waiting in the compositor queue. Opaque, so each
@@ -54,11 +52,42 @@ export class Stage {
   // The treble lane under a point of the roll or board, or null.
   laneAt(x: number, y: number): number | null {
     const geo = this.geo;
-    if (!geo || y < geo.rollTop || y > geo.lanesBottom) return null;
-    for (let note = geo.lo; note <= geo.hi; note++) {
-      if (Math.abs(geo.laneX(note, y) - x) <= geo.lane / 2) return note;
+    // Only up in the roll: the boards below take clicks as key presses (see buttonAt).
+    if (!geo || y < geo.rollTop || y > geo.rollBottom) return null;
+    // Narrow lanes first: a piano's black-key lanes lie over the white ones.
+    const notes: number[] = [];
+    for (let note = geo.lo; note <= geo.hi; note++) notes.push(note);
+    notes.sort((a, b) => geo.laneW(a) - geo.laneW(b));
+    return notes.find(note => Math.abs(geo.laneX(note, y) - x) <= geo.laneW(note) / 2) ?? null;
+  }
+
+  // The key or button at a point, as the notes the instrument would send for it: a treble key or
+  // button, a bass or counter-bass button (one note), or a chord button (its chord's notes).
+  buttonAt(x: number, y: number): { part: 'right' | 'bass' | 'chord'; notes: number[] } | null {
+    const geo = this.geo;
+    if (!geo) return null;
+    if (this.layout.piano) {
+      // Black keys lie over the white ones; keys beyond the instrument's take no presses.
+      const keys = [...this.layout.buttons].sort((a, b) => Number(b.black) - Number(a.black));
+      const k = keys.find(b => {
+        const r = geo.keyRect(b.note);
+        return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      });
+      if (k) return this.layout.playable(k.note) ? { part: 'right', notes: [k.note] } : null;
+    } else {
+      const b = this.layout.buttons.find(b => {
+        if (!geo.showsRow(b.row) || b.note < geo.lo || b.note > geo.hi) return false;
+        const p = geo.pos(b);
+        return Math.hypot(p.x - x, p.y - y) <= geo.radius;
+      });
+      if (b) return { part: 'right', notes: [b.note] };
     }
-    return null;
+    const bb = this.bass.buttons.find(b => {
+      const p = geo.bassPos(b);
+      return Math.hypot(p.x - x, p.y - y) <= geo.bassRadius;
+    });
+    if (!bb) return null;
+    return { part: bb.row === 'bass' || bb.row === 'counter' ? 'bass' : 'chord', notes: this.bass.notesOf(bb) };
   }
 
   flash(note: number, kind: HitResult): void {
@@ -75,7 +104,7 @@ export class Stage {
     // Too small to lay out (e.g. a hidden or minimised window): the layout would go negative.
     if (w < MIN_W || h < MIN_H) return;
     const rows = this.visibleRows(s);
-    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}:${rows}`;
+    const key = `${this.layout.def.name}:${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}:${rows}`;
     if (!this.geo || key !== this.geoKey) {
       this.geo = new Geometry(this.layout, this.bass, w, h, { flipY: s.mirror, flipX: s.mirrorX, rowGap: s.rowGap, rows });
       this.geoKey = key;
@@ -92,7 +121,7 @@ export class Stage {
     this.burstsShown.clear();
 
     const geo = this.geo;
-    drawLanes(ctx, geo, s);
+    drawLanes(ctx, geo, this.layout, s);
     drawGrid(ctx, geo, this.layout, this.buildMarks(s), s.cut?.note ?? null);
     if (s.showUpcoming) this.drawMove(ctx, geo, s);
     drawNotes(ctx, geo, this.layout, s);
@@ -193,15 +222,14 @@ export class Stage {
     return chord ? this.bass.twins(chord) : null;
   }
 
-  // Helper rows fold away when hidden, except a row the song needs (a note only it has).
+  // Switches the right-hand button layout; the board is laid out anew on the next frame.
+  setLayout(layout: Layout): void {
+    this.layout = layout;
+  }
+
+  // Helper rows fold away when hidden.
   private visibleRows(s: ViewState): number[] {
-    if (s.notes !== this.rowsFor) {
-      this.rowsFor = s.notes;
-      this.neededRows = new Set(s.notes.map(n => this.layout.primary(n.note)?.row ?? 0));
-    }
-    return this.layout.rows
-      .filter(r => r.role === 'main' || s.showHelpers || this.neededRows.has(r.row))
-      .map(r => r.row);
+    return this.layout.rows.filter(r => r.role === 'main' || s.showHelpers).map(r => r.row);
   }
 
   private buildBassMarks(s: ViewState): Map<string, Mark> {
@@ -268,7 +296,7 @@ export class Stage {
       const next = s.judge.chords.find(c => c.time > t + 0.02);
       for (const id of next?.ids ?? []) {
         const b = this.layout.primary(s.notes[id].note);
-        if (b) set(b.id, { ring: UPCOMING });
+        if (b && this.layout.playable(b.note)) set(b.id, { ring: UPCOMING });
       }
     }
 
@@ -278,7 +306,7 @@ export class Stage {
       if (n.time > t + 0.02) break;
       if (n.time + n.duration <= t) continue;
       const [primary, ...dups] = this.layout.candidates(n.note);
-      if (!primary) continue;
+      if (!primary || !this.layout.playable(n.note)) continue; // keys beyond the instrument's aren't asked for
       expected.add(n.note);
       // Green while played right (a key let go early counts as unplayed again); otherwise due,
       // missed or not (practice mode never misses: it waits).
