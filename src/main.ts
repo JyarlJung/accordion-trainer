@@ -35,7 +35,6 @@ const ui = {
   rateLabel: $('rateLabel'),
   loopA: $<HTMLButtonElement>('loopA'),
   loopB: $<HTMLButtonElement>('loopB'),
-  loopClear: $<HTMLButtonElement>('loopClear'),
   practiceRight: $<HTMLInputElement>('practiceRight'), // practice (wait) mode for the right hand
   practiceBass: $<HTMLInputElement>('practiceBass'), // ... and for the bass; play mode with neither
   midiIn: $<HTMLSelectElement>('midiIn'),
@@ -111,6 +110,7 @@ function setSong(s: Song): void {
   ui.songName.title = s.name;
   ui.transpose.value = String(options.transpose);
   transport.pause();
+  showPlayState();
   clearLoop();
   renderTracks();
   rebuild(0);
@@ -303,6 +303,10 @@ function togglePlay(): void {
     if (transport.time >= transport.duration) seek(loop?.a ?? 0);
     transport.play();
   }
+  showPlayState();
+}
+
+function showPlayState(): void {
   ui.play.textContent = transport.playing ? '❚❚' : '▶';
 }
 
@@ -402,18 +406,31 @@ function loopGrid(): number[] {
 }
 
 // A marks the start of the bar the playhead is in, B the end of it. Each moves on its own and keeps
-// the other, unless it would land on the wrong side of it: then the other one goes.
+// the other, unless it would land on the wrong side of it: then the other one goes. Pressed where
+// it already is (or right-clicked), a marker goes away.
+const sameSpot = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e-3;
 ui.loopA.onclick = () => {
-  loopA = loopGrid().filter(g => g <= transport.time + 1e-3).pop() ?? transport.time;
-  if (loopB !== null && loopA >= loopB) loopB = null;
+  const at = loopGrid().filter(g => g <= transport.time + 1e-3).pop() ?? transport.time;
+  loopA = sameSpot(loopA, at) ? null : at;
+  if (loopA !== null && loopB !== null && loopA >= loopB) loopB = null;
   applyLoop();
 };
 ui.loopB.onclick = () => {
-  loopB = loopGrid().find(g => g > transport.time + 1e-3) ?? transport.duration;
-  if (loopA !== null && loopB <= loopA) loopA = null;
+  const at = loopGrid().find(g => g > transport.time + 1e-3) ?? transport.duration;
+  loopB = sameSpot(loopB, at) ? null : at;
+  if (loopA !== null && loopB !== null && loopB <= loopA) loopA = null;
   applyLoop();
 };
-ui.loopClear.onclick = clearLoop;
+ui.loopA.oncontextmenu = e => {
+  e.preventDefault();
+  loopA = null;
+  applyLoop();
+};
+ui.loopB.oncontextmenu = e => {
+  e.preventDefault();
+  loopB = null;
+  applyLoop();
+};
 // Each track has its own volume, in whichever part its notes play.
 function volumeOf(track: number): number {
   if (mutedTracks.has(track)) return 0;
@@ -876,7 +893,7 @@ function step(now: number): void {
       transport.time = transport.duration;
       transport.pause();
       silence();
-      ui.play.textContent = '▶';
+      showPlayState();
     }
   }
   const t = transport.time;

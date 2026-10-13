@@ -4,7 +4,7 @@
   --line: #2e2e38;
   --text: #e6e6ea;
   --muted: #9a9aa5;
-  --accent: #e53935;
+  --accent: #00897b;
   color-scheme: dark;
 }
 
@@ -23,7 +23,7 @@ body { display: flex; flex-direction: column; }
 header {
   background: var(--panel);
   border-bottom: 1px solid var(--line);
-  padding: 6px 12px;
+  padding: 8px 20px;
 }
 
 .bar {
