@@ -19,7 +19,6 @@ export interface ViewState extends RollState {
   mirror: boolean; // flip top-bottom
   mirrorX: boolean; // flip left-right
   rowGap: number; // treble row spacing, in button pitches
-  range: { lo: number; hi: number } | null; // treble notes to show; null = all
 }
 
 const FLASH_MS = 400;
@@ -76,9 +75,9 @@ export class Stage {
     // Too small to lay out (e.g. a hidden or minimised window): the layout would go negative.
     if (w < MIN_W || h < MIN_H) return;
     const rows = this.visibleRows(s);
-    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}:${s.range?.lo}-${s.range?.hi}:${rows}`;
+    const key = `${w}x${h}:${s.mirror}:${s.mirrorX}:${s.rowGap}:${rows}`;
     if (!this.geo || key !== this.geoKey) {
-      this.geo = new Geometry(this.layout, this.bass, w, h, { flipY: s.mirror, flipX: s.mirrorX, rowGap: s.rowGap, range: s.range, rows });
+      this.geo = new Geometry(this.layout, this.bass, w, h, { flipY: s.mirror, flipX: s.mirrorX, rowGap: s.rowGap, rows });
       this.geoKey = key;
       this.onLayout?.(this.geo);
     }

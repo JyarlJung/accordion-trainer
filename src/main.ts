@@ -24,8 +24,6 @@ const ui = {
   songName: $('songName'),
   trackRows: $('trackRows'),
   parts: $('parts'),
-  topLine: $<HTMLInputElement>('topLine'),
-  fit: $<HTMLInputElement>('fit'),
   transpose: $<HTMLSelectElement>('transpose'),
   bassOctave: $<HTMLSelectElement>('bassOctave'),
   settingsBtn: $<HTMLButtonElement>('settingsBtn'),
@@ -51,7 +49,6 @@ const ui = {
   noteNames: $<HTMLInputElement>('noteNames'),
   bassChromatic: $<HTMLInputElement>('bassChromatic'),
   rowGap: $<HTMLInputElement>('rowGap'),
-  fitRange: $<HTMLInputElement>('fitRange'),
   hitWindow: $<HTMLInputElement>('hitWindow'),
   hitWindowLabel: $('hitWindowLabel'),
   latency: $<HTMLInputElement>('latency'),
@@ -64,7 +61,6 @@ const ui = {
 };
 
 const layout = new Layout(layoutJson as LayoutDef);
-const keyRange = { min: layout.minNote, max: layout.maxNote };
 const transport = new Transport();
 const midi = new MidiIO();
 const bassLayout = new BassLayout(bassJson as BassLayoutDef);
@@ -103,27 +99,6 @@ const letGo = new Set<number>();
 let loopA: number | null = null; // loop markers, each set on its own; together (A before B) they loop
 let loopB: number | null = null;
 let loop: { a: number; b: number } | null = null;
-let songRange: { lo: number; hi: number } | null = null;
-
-const RANGE_MARGIN = 2; // semitones shown beyond the song's lowest and highest notes
-const RANGE_MIN = 30; // never zoom in to less than two and a half octaves
-
-// Treble range to show when "song range only" is on: the song's notes plus a margin,
-// widened to RANGE_MIN and kept inside the keyboard.
-function rangeFor(list: SongNote[]): { lo: number; hi: number } | null {
-  // Notes the keyboard can't play (possible with range fitting off) aren't shown, so ignore them.
-  const playable = list.filter(n => layout.primary(n.note)).map(n => n.note);
-  if (playable.length === 0) return null;
-  let lo = Math.min(...playable) - RANGE_MARGIN;
-  let hi = Math.max(...playable) + RANGE_MARGIN;
-  const grow = Math.max(0, RANGE_MIN - (hi - lo));
-  lo -= Math.floor(grow / 2);
-  hi += Math.ceil(grow / 2);
-  if (lo < layout.minNote) [lo, hi] = [layout.minNote, hi + layout.minNote - lo];
-  if (hi > layout.maxNote) [lo, hi] = [lo - (hi - layout.maxNote), layout.maxNote];
-  return { lo: Math.max(lo, layout.minNote), hi: Math.min(hi, layout.maxNote) };
-}
-
 // ---------- song ----------
 
 function setSong(s: Song): void {
@@ -133,9 +108,7 @@ function setSong(s: Song): void {
   trackVolumes.clear();
   mutedTracks.clear();
   ui.songName.textContent = s.name;
-  ui.songName.classList.remove('muted');
-  ui.topLine.checked = options.topLineOnly;
-  ui.fit.checked = options.fitToRange;
+  ui.songName.title = s.name;
   ui.transpose.value = String(options.transpose);
   transport.pause();
   clearLoop();
@@ -162,10 +135,9 @@ stage.onLayout = placePanels;
 
 function rebuild(t = transport.time): void {
   if (!song || !options) return;
-  treble.notes = extractNotes(song, options, keyRange);
-  bass.notes = extractBass(song, options, keyRange);
+  treble.notes = extractNotes(song, options);
+  bass.notes = extractBass(song, options);
   others.notes = extractOthers(song, options);
-  songRange = rangeFor(treble.notes);
   judge = new Judge(treble.notes, n => layout.primary(n) !== undefined);
   judge.windowSec = hitWindow();
   bassJudge = new BassJudge(bass.notes, bassLayout);
@@ -199,6 +171,7 @@ function silence(): void {
 // One row per track: its voice, its volume, a mute switch and a checkbox for each part.
 function renderTracks(): void {
   ui.trackRows.replaceChildren();
+  ui.parts.classList.toggle('empty', !song);
   if (!song || !options) return;
   const opts = options;
   for (const t of song.tracks) {
@@ -272,21 +245,11 @@ canvas.addEventListener('contextmenu', e => cutAt(e, true));
 canvas.addEventListener('mousemove', e => {
   canvas.style.cursor = song && stage.laneAt(e.offsetX, e.offsetY) !== null ? 'pointer' : '';
 });
-ui.topLine.onchange = () => {
-  if (!options) return;
-  options.topLineOnly = ui.topLine.checked;
-  rebuild();
-};
 for (let t = -12; t <= 12; t++) ui.transpose.append(new Option(t > 0 ? `+${t}` : String(t), String(t)));
 ui.transpose.value = '0';
 ui.transpose.onchange = () => {
   if (!options) return;
   options.transpose = Number(ui.transpose.value);
-  rebuild();
-};
-ui.fit.onchange = () => {
-  if (!options) return;
-  options.fitToRange = ui.fit.checked;
   rebuild();
 };
 
@@ -295,11 +258,21 @@ $<HTMLButtonElement>('resetPrefs').onclick = () => {
   resetPrefs();
   location.reload();
 };
-ui.settingsBtn.onclick = () => {
-  ui.settings.hidden = !ui.settings.hidden;
-  ui.settingsBtn.classList.toggle('active', !ui.settings.hidden);
-};
+// The settings menu drops down under ⚙ and closes on a click outside it or Esc.
+function showSettings(show: boolean): void {
+  ui.settings.hidden = !show;
+  ui.settingsBtn.classList.toggle('active', show);
+}
+ui.settingsBtn.onclick = () => showSettings(ui.settings.hidden !== false);
+document.addEventListener('pointerdown', e => {
+  const t = e.target as Node;
+  if (!ui.settings.hidden && !ui.settings.contains(t) && !ui.settingsBtn.contains(t)) showSettings(false);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !ui.settings.hidden) showSettings(false);
+});
 
+$('openOther').onclick = () => ui.file.click();
 ui.file.onchange = () => {
   const f = ui.file.files?.[0];
   if (f) loadFile(f);
@@ -476,16 +449,6 @@ function applyRowGap(): void {
 }
 ui.rowGap.oninput = applyRowGap;
 
-// Toolbar collapse, remembered across launches.
-const collapseBtn = $<HTMLButtonElement>('collapse');
-function setCollapsed(collapsed: boolean): void {
-  document.body.classList.toggle('collapsed', collapsed);
-  collapseBtn.textContent = collapsed ? '▼' : '▲';
-  setPref('toolbarCollapsed', collapsed);
-}
-collapseBtn.onclick = () => setCollapsed(!document.body.classList.contains('collapsed'));
-setCollapsed(getPref('toolbarCollapsed') === true);
-
 // Don't leave notes hanging on an external instrument when the app closes.
 function shutdown(): void {
   silence();
@@ -633,7 +596,7 @@ persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.latency, 'latency', applyLatency);
 persist(ui.metronome, 'metronomeLevel');
 persist(ui.metronomeUnit, 'metronomeUnit', makeClicks);
-for (const [el, key] of [[ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
+for (const [el, key] of [[ui.helpers, 'helpers'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
   persist(el, key);
 }
 
@@ -654,6 +617,7 @@ function applyPractice(): void {
   const on = practicing();
   for (const el of document.querySelectorAll<HTMLElement>('.practice-only')) el.classList.toggle('off', !on);
   ui.hitWindow.disabled = !on;
+  ui.followInput.disabled = !on;
 }
 for (const box of [ui.practiceRight, ui.practiceBass]) {
   box.addEventListener('change', () => {
@@ -862,7 +826,6 @@ function drawStage(): void {
     mirror: ui.mirror.checked,
     mirrorX: ui.mirrorX.checked,
     rowGap: Number(ui.rowGap.value),
-    range: ui.fitRange.checked ? songRange : null,
   });
 }
 

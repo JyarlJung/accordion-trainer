@@ -5,7 +5,6 @@ export interface GeometryOptions {
   flipY: boolean; // reverse the row order of both boards
   flipX: boolean; // mirror everything left-right
   rowGap: number; // distance between treble rows, in button pitches
-  range: { lo: number; hi: number } | null; // treble notes to show; null = the whole keyboard
   rows: number[]; // treble rows to draw (hidden rows are folded away)
 }
 
@@ -80,8 +79,8 @@ export class Geometry {
     this.bassRows = bass.def.rows.length;
     this.bassSlant = bass.def.rowSlant;
     const semis = layout.def.semitonesPerButton;
-    this.lo = opts.range?.lo ?? layout.minNote;
-    this.hi = opts.range?.hi ?? layout.maxNote;
+    this.lo = layout.minNote;
+    this.hi = layout.maxNote;
     const rhSpan = (this.hi - this.lo) / semis + 1;
     const bassSpan = bass.columns + this.bassSlant * (this.bassRows - 1);
     const g = opts.rowGap;

@@ -12,17 +12,22 @@
         <input type="range" id="seek" min="0" max="1000" value="0" />
         <span id="time" class="mono">0:00 / 0:00</span>
         <span class="sep"></span>
-        <label>속도 <input type="range" id="rate" min="0.25" max="1.5" step="0.05" value="1" /></label>
-        <span id="rateLabel" class="mono">100%</span>
+        <span class="cat">
+          <span class="cat-title">속도</span>
+          <input type="range" id="rate" min="0.25" max="1.5" step="0.05" value="1" />
+          <span id="rateLabel" class="mono">100%</span>
+        </span>
         <span class="sep"></span>
-        <span class="group" title="마디 단위로 구간을 반복합니다">구간반복
+        <span class="cat" title="마디 단위로 구간을 반복합니다">
+          <span class="cat-title">구간 반복</span>
           <button id="loopA" title="구간 시작">A</button>
           <button id="loopB" title="구간 끝">B</button>
           <button id="loopClear" title="구간 해제">✕</button>
         </span>
         <span class="sep"></span>
-        <span class="group">
-          <label title="메트로놈 볼륨. 0%면 꺼집니다. 마디 첫 박은 높은 소리">메트로놈 <input type="range" id="metronome" min="0" max="1" step="0.1" value="0" /></label>
+        <span class="cat">
+          <span class="cat-title" title="메트로놈 볼륨. 0%면 꺼집니다. 마디 첫 박은 높은 소리">메트로놈</span>
+          <input type="range" id="metronome" min="0" max="1" step="0.1" value="0" title="메트로놈 볼륨. 0%면 꺼집니다. 마디 첫 박은 높은 소리" />
           <select id="metronomeUnit" title="클릭 간격: 2분은 두 박마다(원이 한 번 왕복할 때), 4분은 박마다(원이 끝에 닿을 때), 8분은 박 사이에도 작은 소리로">
             <option value="half">2분</option>
             <option value="quarter" selected>4분</option>
@@ -31,73 +36,81 @@
           <span id="beatSwing" title="원이 박마다 양 끝을 오갑니다. 오른손 건반을 누르면 그때 원이 있던 자리에 흐린 원이 남습니다(입력 지연 반영): 끝에 남으면 박에 맞게 친 것입니다"></span>
         </span>
         <span class="spacer"></span>
-        <button id="settingsBtn" title="악기 연결, 연습, 화면 설정">⚙</button>
-        <button id="collapse" title="툴바 접기/펼치기">▲</button>
+        <span class="menu-anchor">
+          <button id="settingsBtn" title="악기 연결, 화면 설정">⚙</button>
+          <div id="settings" class="menu" hidden>
+            <div class="menu-group">
+              <span class="cat-title">MIDI 입력</span>
+              <label>입력 <select id="midiIn"></select></label>
+              <span class="group">
+                <label title="악기 입력과 MIDI 출력에 쓰는 채널">채널 오른손 <select id="chRight"></select></label>
+                <label>베이스 <select id="chBass"></select></label>
+                <label>코드 <select id="chChord"></select></label>
+              </span>
+              <span id="lastCh" class="muted"></span>
+              <span class="group">
+                <label title="악기 입력이 늦게 도착하는 만큼 판정을 앞당겨 맞춥니다">입력 지연 <input type="range" id="latency" min="0" max="300" step="5" value="0" /></label>
+                <span id="latencyLabel" class="mono">0ms</span>
+              </span>
+            </div>
+            <div class="menu-group">
+              <span class="cat-title">화면</span>
+              <label title="곧 칠 버튼을 건반에 미리 보여 줍니다"><input type="checkbox" id="upcoming" checked /> 다음 누를 버튼 표시</label>
+              <label><input type="checkbox" id="mirror" /> 위아래 반전</label>
+              <label><input type="checkbox" id="mirrorX" /> 좌우 반전</label>
+              <label><input type="checkbox" id="helpers" /> 4·5열 표시</label>
+              <span class="group">
+                <label title="오른손 줄 사이 간격(버튼 간격 대비). 실제 버튼 배치는 약 0.87(√3/2)입니다">줄 간격 <input type="range" id="rowGap" min="0.35" max="0.9" step="0.01" value="0.5" /></label>
+                <span id="rowGapLabel" class="mono">0.50</span>
+              </span>
+              <label><input type="checkbox" id="noteNames" checked /> 노트에 음 이름 표시</label>
+              <label title="베이스 롤 레인을 C C# D … 순서로 (끄면 보드와 같은 5도 순서)"><input type="checkbox" id="bassChromatic" /> 베이스 반음 순서</label>
+            </div>
+            <div class="menu-foot">
+              <button id="resetPrefs" title="저장된 설정을 모두 지우고 기본값으로 시작">설정 초기화</button>
+            </div>
+          </div>
+        </span>
       </div>
       <div id="toolbarBody">
         <div class="bar">
-          <label class="btn">MIDI 열기<input type="file" id="file" accept=".mid,.midi" hidden /></label>
-          <span id="songName"></span>
+          <span class="cat">
+            <span class="cat-title">음높이</span>
+            <label>조옮김 <select id="transpose"></select></label>
+            <label title="베이스와 코드 소리를 옥타브 단위로 옮깁니다 (화면의 버튼과 노트는 그대로)">베이스 옥타브 <select id="bassOctave">
+              <option value="1">+1</option>
+              <option value="0" selected>0</option>
+              <option value="-1">-1</option>
+            </select></label>
+          </span>
           <span class="sep"></span>
-          <label>조옮김 <select id="transpose"></select></label>
-          <label title="베이스와 코드 소리를 옥타브 단위로 옮깁니다 (화면의 버튼과 노트는 그대로)">베이스 옥타브 <select id="bassOctave">
-            <option value="1">+1</option>
-            <option value="0" selected>0</option>
-            <option value="-1">-1</option>
-          </select></label>
-          <span class="sep"></span>
-          <label><input type="checkbox" id="upcoming" checked /> 다음 버튼</label>
-          <span class="sep"></span>
-          <span class="group wide">
-          <span title="체크한 파트의 노트를 칠 때까지 기다립니다. 놓친 곳은 그 자리에서 멈추고, 함께 시작하는 음과 버튼을 모두 동시에 누르고 있어야 진행합니다. 둘 다 끄면 재생 모드입니다">연습 모드</span>
-          <label title="오른손 노트를 칠 때까지 기다립니다"><input type="checkbox" id="practiceRight" /> 오른손</label>
-          <label title="베이스 음과 코드를 칠 때까지 기다립니다. 베이스 음은 같은 음을 내는 버튼(기본 베이스, 카운터) 어느 것이든, 코드는 그 코드 버튼이면 맞습니다"><input type="checkbox" id="practiceBass" /> 베이스</label>
-          <label class="practice-only" title="연습 모드에서 이 시간 안에 누르면 맞음으로 칩니다 (앞뒤)">판정 <input type="range" id="hitWindow" min="50" max="200" step="10" value="120" /></label>
-          <span id="hitWindowLabel" class="mono practice-only">120ms</span>
+          <span class="cat">
+            <span class="cat-title" title="체크한 파트의 노트를 칠 때까지 기다립니다. 놓친 곳은 그 자리에서 멈추고, 함께 시작하는 음과 버튼을 모두 동시에 누르고 있어야 진행합니다. 둘 다 끄면 재생 모드입니다">연습 모드</span>
+            <label title="오른손 노트를 칠 때까지 기다립니다"><input type="checkbox" id="practiceRight" /> 오른손</label>
+            <label title="베이스 음과 코드를 칠 때까지 기다립니다. 베이스 음은 같은 음을 내는 버튼(기본 베이스, 카운터) 어느 것이든, 코드는 그 코드 버튼이면 맞습니다"><input type="checkbox" id="practiceBass" /> 베이스</label>
+            <span class="group practice-only">
+              <label title="연습 모드에서 이 시간 안에 누르면 맞음으로 칩니다 (앞뒤)">판정 <input type="range" id="hitWindow" min="50" max="200" step="10" value="120" /></label>
+              <span id="hitWindowLabel" class="mono">120ms</span>
+            </span>
+            <label class="practice-only" title="연습 중인 파트의 소리를 내 건반에 맞춥니다: 노트는 도착할 때 소리 나기 시작하고, 판정 안에서 맞게 치면 그 건반을 뗄 때 멈춥니다. 놓친 뒤나 틀린 음은 누르는 동안만 소리 납니다"><input type="checkbox" id="followInput" /> 내 연주로 소리내기</label>
           </span>
         </div>
-      </div>
-      <div id="settings" class="bar" hidden>
-        <span class="group wide">
-          <label>입력 <select id="midiIn"></select></label>
-          <label title="악기 입력과 MIDI 출력에 쓰는 채널">채널 오른손 <select id="chRight"></select></label>
-          <label>베이스 <select id="chBass"></select></label>
-          <label>코드 <select id="chChord"></select></label>
-          <span id="lastCh" class="muted"></span>
-          <label title="악기 입력이 늦게 도착하는 만큼 판정을 앞당겨 맞춥니다">입력 지연 <input type="range" id="latency" min="0" max="300" step="5" value="0" /></label>
-          <span id="latencyLabel" class="mono">0ms</span>
-        </span>
-        <span class="sep"></span>
-        <span class="group wide">
-          <label title="연습 모드에서 오른손 소리를 내 건반에 맞춥니다: 노트는 도착할 때 소리 나기 시작하고, 판정 안에서 맞게 치면 그 건반을 뗄 때 멈춥니다. 놓친 뒤나 틀린 음은 누르는 동안만 소리 납니다."><input type="checkbox" id="followInput" /> 내 연주로 소리</label>
-        </span>
-        <span class="sep"></span>
-        <span class="group wide">
-          <label><input type="checkbox" id="mirror" /> 위아래 반전</label>
-          <label><input type="checkbox" id="mirrorX" /> 좌우 반전</label>
-          <label><input type="checkbox" id="helpers" checked /> 4·5열 표시</label>
-          <label><input type="checkbox" id="fitRange" /> 곡 음역만 표시</label>
-          <label title="오른손 줄 사이 간격(버튼 간격 대비). 실제 버튼 배치는 약 0.87(√3/2)입니다">줄 간격 <input type="range" id="rowGap" min="0.35" max="0.9" step="0.01" value="0.5" /></label>
-          <span id="rowGapLabel" class="mono">0.50</span>
-        </span>
-        <span class="sep"></span>
-        <span class="group wide">
-          <label><input type="checkbox" id="noteNames" checked /> 노트 음 이름</label>
-          <label title="베이스 롤 레인을 C C# D … 순서로 (끄면 보드와 같은 5도 순서)"><input type="checkbox" id="bassChromatic" /> 베이스 반음 순서</label>
-        </span>
-        <span class="spacer"></span>
-        <button id="resetPrefs" title="저장된 설정을 모두 지우고 기본값으로 시작">설정 초기화</button>
       </div>
     </header>
     <main>
       <canvas id="stage"></canvas>
-      <div id="parts">
+      <div id="parts" class="empty">
+        <div class="song-bar">
+          <span id="songName"></span>
+          <button id="openOther" title="다른 MIDI 파일을 엽니다 (파일을 끌어다 놓아도 됩니다)">다른 곡 열기</button>
+        </div>
         <div class="track-head"><span>트랙</span><span title="트랙의 음을 낼 악기 (GeneralUser GS 사운드폰트) 또는 MIDI 출력">음색</span><span>볼륨</span><span title="음소거">끔</span><span title="오른손">오</span><span title="베이스">베</span></div>
         <div id="trackRows" class="track-rows"></div>
-        <div class="part-row">
-          <label title="오른손: 함께 시작하는 음 중 가장 높은 음만"><input type="checkbox" id="topLine" /> 최고음만</label>
-          <label title="오른손: 건반 밖의 음을 옥타브 옮겨 맞춤"><input type="checkbox" id="fit" checked /> 음역 맞춤</label>
-        </div>
+        <label class="drop-zone">
+          <span class="btn">MIDI 파일 열기</span>
+          <span class="muted">또는 MIDI 파일을 여기로 끌어다 놓으세요</span>
+          <input type="file" id="file" accept=".mid,.midi" hidden />
+        </label>
       </div>
     </main>
     <div id="error" hidden title="오류가 났습니다. 클릭하면 닫힙니다"></div>

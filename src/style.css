@@ -25,7 +25,6 @@ header {
   border-bottom: 1px solid var(--line);
   padding: 6px 12px;
 }
-body.collapsed #toolbarBody { display: none; }
 
 .bar {
   display: flex;
@@ -34,19 +33,42 @@ body.collapsed #toolbarBody { display: none; }
   gap: 6px 10px;
   min-height: 32px;
 }
-.sep { width: 1px; height: 18px; background: var(--line); }
+.sep { width: 1px; height: 22px; margin: 0 8px; background: var(--line); }
 .group { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.group.wide { gap: 6px 10px; } /* a run of related settings that wraps as one */
+/* A category: its bold title, then its options. */
+.cat { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.cat-title { font-weight: 700; white-space: nowrap; }
 .practice-only.off { opacity: 0.4; pointer-events: none; } /* options that only apply in practice mode */
 #time { white-space: nowrap; }
 .group[hidden], .bar[hidden] { display: none; }
 
-/* Transport row stays visible even with the toolbar collapsed; the seek bar takes the spare width. */
-.transport { flex-wrap: nowrap; }
+/* The seek bar takes the transport row's spare width. */
+.transport, .transport .cat { flex-wrap: nowrap; }
 .transport #seek { flex: 1 1 50%; width: auto; min-width: 120px; max-width: 50%; }
 .spacer { flex: 1; }
 #play { min-width: 56px; font-size: 15px; }
 #settingsBtn { font-size: 15px; padding: 1px 8px; }
+
+/* Settings drop down under the ⚙ button, one group per section. */
+.menu-anchor { position: relative; }
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+.menu[hidden] { display: none; }
+.menu-group { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.menu > * + * { border-top: 1px solid var(--line); padding-top: 14px; }
+.menu-foot button { width: 100%; }
 
 .muted { color: var(--muted); }
 .mono { font-variant-numeric: tabular-nums; }
@@ -102,10 +124,27 @@ main { flex: 1; min-height: 0; position: relative; }
 .track-row select { width: 100%; min-width: 0; padding: 1px 4px; }
 .track-row input[type=range] { width: 100%; margin: 0; }
 .track-rows { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.track-rows:empty::before { content: 'MIDI를 열면 트랙이 나옵니다'; color: var(--muted); }
 .track-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track-name small { color: var(--muted); }
-.part-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+
+/* With no song the track table is one big "open a MIDI file" area; with one, the song's name
+   and a small button to open another head the table. */
+.song-bar { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+#songName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; font-size: 13px; }
+.song-bar button { padding: 1px 8px; font-size: 12px; }
+#parts.empty > :not(.drop-zone), #parts:not(.empty) > .drop-zone { display: none; }
+.drop-zone {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  border: 2px dashed var(--line);
+  border-radius: 8px;
+}
+.drop-zone:hover, body.dragging .drop-zone { border-color: var(--accent); }
+.drop-zone .btn { padding: 8px 20px; font-size: 15px; }
 
 canvas { display: block; width: 100%; height: 100%; }
 

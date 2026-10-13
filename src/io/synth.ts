@@ -70,8 +70,10 @@ export class SynthChannelSink implements NoteSink {
   private readonly channel = engine.takeChannel();
   private readonly on = new Set<number>();
 
+  // The preset goes on before any note: right away once the bank is loaded, else when it is.
   constructor(private preset: string, private volume: number) {
-    void engine.ready.then(() => this.apply());
+    if (this.synth) this.apply();
+    else void engine.ready.then(() => this.apply());
   }
 
   private get synth(): WorkletSynthesizer | null {
@@ -104,8 +106,11 @@ export class SynthChannelSink implements NoteSink {
     this.setVolume(this.volume);
   }
 
+  // A note sounding again is struck anew, as on a real key: the synth's noteOff ends only one of a
+  // pitch's noteOns, so a second one left on its own would never stop.
   noteOn(note: number, velocity: number): void {
     if (!this.synth || note < 0 || note > 127) return;
+    if (this.on.has(note)) this.synth.noteOff(this.channel, note);
     this.synth.noteOn(this.channel, note, Math.max(1, Math.round(velocity * 127)));
     this.on.add(note);
   }
