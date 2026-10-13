@@ -102,7 +102,8 @@ const FREE_VELOCITY = 0.8; // for presses that don't match a song note
 // colour (the hit still counts).
 const hitKeys = new Map<number, number>(); // right-hand pitch -> id of the note its press hit
 const letGo = new Set<number>();
-let loopStart: number | null = null;
+let loopA: number | null = null; // loop markers, each set on its own; together (A before B) they loop
+let loopB: number | null = null;
 let loop: { a: number; b: number } | null = null;
 let songRange: { lo: number; hi: number } | null = null;
 
@@ -395,10 +396,18 @@ ui.metronome.addEventListener('input', () => metronome.start());
 ui.metronomeUnit.addEventListener('change', makeClicks);
 
 function clearLoop(): void {
-  loopStart = null;
-  loop = null;
-  ui.loopA.classList.remove('active');
-  ui.loopB.classList.remove('active');
+  loopA = loopB = null;
+  applyLoop();
+}
+
+// The loop from the markers. A loop that has only just come about starts playing from A; moving an
+// end of a loop already there leaves the playhead alone.
+function applyLoop(): void {
+  const had = loop !== null;
+  loop = loopA !== null && loopB !== null && loopA < loopB ? { a: loopA, b: loopB } : null;
+  ui.loopA.classList.toggle('active', loopA !== null);
+  ui.loopB.classList.toggle('active', loopB !== null);
+  if (loop && !had) seek(loop.a, true);
 }
 
 ui.play.onclick = togglePlay;
@@ -423,21 +432,17 @@ function loopGrid(): number[] {
   return song?.bars ?? [];
 }
 
+// A marks the start of the bar the playhead is in, B the end of it. Each moves on its own and keeps
+// the other, unless it would land on the wrong side of it: then the other one goes.
 ui.loopA.onclick = () => {
-  const grid = loopGrid();
-  loopStart = grid.filter(g => g <= transport.time + 1e-3).pop() ?? transport.time;
-  loop = null;
-  ui.loopA.classList.add('active');
-  ui.loopB.classList.remove('active');
+  loopA = loopGrid().filter(g => g <= transport.time + 1e-3).pop() ?? transport.time;
+  if (loopB !== null && loopA >= loopB) loopB = null;
+  applyLoop();
 };
 ui.loopB.onclick = () => {
-  if (loopStart === null) return;
-  const start = loopStart;
-  const end = loopGrid().find(g => g > Math.max(transport.time, start) + 1e-3) ?? transport.duration;
-  if (end <= start) return;
-  loop = { a: start, b: end };
-  ui.loopB.classList.add('active');
-  seek(loop.a, true);
+  loopB = loopGrid().find(g => g > transport.time + 1e-3) ?? transport.duration;
+  if (loopA !== null && loopB <= loopA) loopA = null;
+  applyLoop();
 };
 ui.loopClear.onclick = clearLoop;
 // Each track has its own volume, in whichever part its notes play.
