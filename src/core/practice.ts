@@ -25,6 +25,9 @@ export class WaitMode {
   // Instrument input delay, seconds: presses arrive this long after they were played, so the
   // clock runs on that much longer before calling a chord missed.
   latencySec = 0;
+  // Whether everything due at a time is held down right now. A chord the clock waits for moves
+  // on only once it is, so its notes can't be played one at a time, letting go of each.
+  allHeld: (time: number) => boolean = () => true;
   private missedAt: number | null = null;
 
   reset(): void {
@@ -34,6 +37,12 @@ export class WaitMode {
   // Advances the clock; true when a chord was just missed and the clock jumped back to it.
   tick(parts: Waited[], transport: Transport, nowMs: number): boolean {
     const due = nextDue(parts);
+    // Every note of the missed chord has been played, but not all of them are held together yet.
+    if (this.missedAt !== null && this.missedAt !== due && !this.allHeld(this.missedAt)) {
+      transport.hold = this.missedAt;
+      transport.tick(nowMs);
+      return false;
+    }
     if (due === null) {
       transport.hold = null;
       transport.tick(nowMs);

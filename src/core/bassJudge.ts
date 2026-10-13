@@ -54,6 +54,11 @@ export class BassJudge {
     return null;
   }
 
+  // What's due at song time t.
+  targetsAt(t: number): BassTarget[] {
+    return this.targets.filter(g => Math.abs(g.time - t) < EPS);
+  }
+
   // A bass button (fundamental or counter-bass) sounding `note`, played at song time t.
   onBass(note: number, t: number, rate: number): HitResult {
     return this.match(t, rate, g => g.chord === null && g.pc === ((note % 12) + 12) % 12);

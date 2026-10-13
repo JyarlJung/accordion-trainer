@@ -38,7 +38,8 @@ const ui = {
   loopA: $<HTMLButtonElement>('loopA'),
   loopB: $<HTMLButtonElement>('loopB'),
   loopClear: $<HTMLButtonElement>('loopClear'),
-  practice: $<HTMLInputElement>('practice'), // practice (wait) mode; play mode when off
+  practiceRight: $<HTMLInputElement>('practiceRight'), // practice (wait) mode for the right hand
+  practiceBass: $<HTMLInputElement>('practiceBass'), // ... and for the bass; play mode with neither
   midiIn: $<HTMLSelectElement>('midiIn'),
   chRight: $<HTMLSelectElement>('chRight'),
   chBass: $<HTMLSelectElement>('chBass'),
@@ -57,7 +58,6 @@ const ui = {
   latencyLabel: $('latencyLabel'),
   upcoming: $<HTMLInputElement>('upcoming'),
   followInput: $<HTMLInputElement>('followInput'),
-  waitBass: $<HTMLInputElement>('waitBass'),
   metronome: $<HTMLInputElement>('metronome'),
   metronomeUnit: $<HTMLSelectElement>('metronomeUnit'),
   rowGapLabel: $('rowGapLabel'),
@@ -633,17 +633,38 @@ persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.latency, 'latency', applyLatency);
 persist(ui.metronome, 'metronomeLevel');
 persist(ui.metronomeUnit, 'metronomeUnit', makeClicks);
-for (const [el, key] of [[ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.practice, 'practice'], [ui.waitBass, 'waitBass'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
+for (const [el, key] of [[ui.helpers, 'helpers'], [ui.fitRange, 'fitRange'], [ui.upcoming, 'upcoming'], [ui.followInput, 'followInput'], [ui.mirror, 'mirror'], [ui.mirrorX, 'mirrorX'], [ui.noteNames, 'noteNames'], [ui.bassChromatic, 'bassChromatic']] as const) {
   persist(el, key);
 }
 
+// Practice mode, part by part: either part checked waits for that part. Saved settings from before
+// the split ("practice" with "bass too") carry over.
+function practicing(): boolean {
+  return ui.practiceRight.checked || ui.practiceBass.checked;
+}
+if (getPref('practiceRight') === undefined && getPref('practice') === true) {
+  setPref('practiceRight', true);
+  setPref('practiceBass', getPref('waitBass') !== false);
+}
+persist(ui.practiceRight, 'practiceRight');
+persist(ui.practiceBass, 'practiceBass');
+
 // The options that only apply in practice mode fade out without it.
 function applyPractice(): void {
-  const on = ui.practice.checked;
+  const on = practicing();
   for (const el of document.querySelectorAll<HTMLElement>('.practice-only')) el.classList.toggle('off', !on);
-  ui.waitBass.disabled = ui.hitWindow.disabled = !on;
+  ui.hitWindow.disabled = !on;
 }
-ui.practice.addEventListener('change', applyPractice);
+for (const box of [ui.practiceRight, ui.practiceBass]) {
+  box.addEventListener('change', () => {
+    applyPractice();
+    silence(); // play-by-my-keys and the parts' sounds change hands
+    // A part switched on mid-song mustn't pull the clock back to what already went by.
+    judge.resetFrom(transport.time, false);
+    bassJudge.resetFrom(transport.time);
+    waiter.reset();
+  });
+}
 applyPractice();
 
 // "Play by my keys" (practice mode; the bass too when it's practised): the sound follows the
@@ -652,10 +673,10 @@ applyPractice();
 // hasn't arrived yet), and any other press sounds as played. Either way it stops when the key is
 // released.
 function followInput(): boolean {
-  return ui.practice.checked && ui.followInput.checked;
+  return ui.practiceRight.checked && ui.followInput.checked;
 }
 function followBass(): boolean {
-  return followInput() && ui.waitBass.checked;
+  return ui.practiceBass.checked && ui.followInput.checked;
 }
 const holdUntil = (n: SongNote) => n.time + (judge.windowSec + latency()) * transport.rate;
 treble.endOf = n => {
@@ -666,7 +687,6 @@ treble.endOf = n => {
 // Bass notes a press takes over leave the player, so any still sounding is unplayed so far.
 bass.endOf = n => (followBass() ? Math.max(n.time + n.duration, holdUntil(n)) : n.time + n.duration);
 ui.followInput.addEventListener('change', silence);
-ui.waitBass.addEventListener('change', silence);
 
 function holdKey(part: Part, key: number, sounds: Sound[]): void {
   inputHeld.set(`${part}:${key}`, sounds);
@@ -704,7 +724,7 @@ midi.onNoteOff = (part, note) => {
   if (id !== undefined) {
     hitKeys.delete(note);
     const n = treble.notes[id];
-    if (ui.practice.checked && transport.time < n.time + n.duration) letGo.add(id);
+    if (ui.practiceRight.checked && transport.time < n.time + n.duration) letGo.add(id);
   }
   drawStage();
 };
@@ -712,12 +732,29 @@ midi.onNoteOff = (part, note) => {
 // it was played (the input delay before it arrived taken off).
 const beatSwing = new BeatSwing($('beatSwing'));
 
-// What wait mode waits for: the right hand, and the bass too unless that's switched off.
+// What practice mode waits for: the parts checked.
 function waited(): Waited[] {
-  return ui.waitBass.checked ? [judge, bassJudge] : [judge];
+  return [...(ui.practiceRight.checked ? [judge] : []), ...(ui.practiceBass.checked ? [bassJudge] : [])];
 }
-// Switched on mid-song, the bass already passed mustn't pull the clock back.
-ui.waitBass.addEventListener('change', () => bassJudge.resetFrom(transport.time));
+
+// Everything due at a time, in the parts practised, held down now: each right-hand note's key, a
+// button for each bass note, the button of each chord.
+waiter.allHeld = time => {
+  if (ui.practiceRight.checked) {
+    for (const n of treble.notes) {
+      if (n.time > time + CHORD_EPS) break;
+      if (Math.abs(n.time - time) < CHORD_EPS && judge.state[n.id] !== 'skipped' && !midi.held.right.has(n.note)) return false;
+    }
+  }
+  if (ui.practiceBass.checked) {
+    const pcs = new Set([...midi.held.bass.keys()].map(n => n % 12));
+    const chord = bassLayout.forChord(midi.held.chord.keys());
+    for (const g of bassJudge.targetsAt(time)) {
+      if (g.chord === null ? !pcs.has(g.pc) : !(chord && chord.row === g.chord && chord.root === g.pc)) return false;
+    }
+  }
+  return true;
+};
 
 // A bass or chord button in wait mode. A chord button sends its notes one by one; it counts once
 // they make a chord.
@@ -725,7 +762,7 @@ ui.waitBass.addEventListener('change', () => bassJudge.resetFrom(transport.time)
 // played. A chord button's notes sound one by one as they come, then the chord's song notes take
 // over once they make it.
 function bassPress(part: Part, note: number): void {
-  if (!ui.practice.checked || !ui.waitBass.checked) return;
+  if (!ui.practiceBass.checked) return;
   const rate = transport.rate;
   const follow = followBass();
   if (follow) startSound();
@@ -760,7 +797,7 @@ midi.onNoteOn = (part, note) => {
 };
 
 function judgePress(note: number): void {
-  const waitMode = ui.practice.checked;
+  const waitMode = ui.practiceRight.checked;
   const wasWaiting = transport.waiting;
   const result = waitMode
     ? pressInWaitMode(waited(), transport, latency(), t => judge.onNoteOn(note, t, transport.rate))
@@ -815,7 +852,7 @@ function drawStage(): void {
     firstBar: song?.firstBar ?? 1,
     cut: options?.cut ?? null,
     letGo,
-    practice: ui.practice.checked,
+    practice: ui.practiceRight.checked,
     rate: transport.rate,
     noteNames: ui.noteNames.checked,
     bassChromatic: ui.bassChromatic.checked,
@@ -856,7 +893,7 @@ function showError(e: unknown): void {
 }
 
 function step(now: number): void {
-  const waitMode = ui.practice.checked;
+  const waitMode = practicing();
   if (waitMode) {
     // A missed chord falls silent, bass included, and both parts play on from it once it's
     // played right.
@@ -895,7 +932,8 @@ function step(now: number): void {
     others.update(t, transport.playing);
   }
   // Notes count as missed only once a press played in time could no longer still be arriving.
-  if (!waitMode && transport.playing) judge.update(t - latency() * transport.rate, transport.rate);
+  // (A right hand not practised is judged as in play mode.)
+  if (!ui.practiceRight.checked && transport.playing) judge.update(t - latency() * transport.rate, transport.rate);
 
   drawStage();
 
