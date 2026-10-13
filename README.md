@@ -20,7 +20,7 @@ When a song's treble part goes lower than you want to play with the right hand (
 - Click the same lane the same way again to undo.
 
 ## Getting started
-Download the exe from [Releases](../../releases) and run it; there's nothing to install. The same app also runs in a browser with Web MIDI (Chrome, Edge). "Open the sample song" on the first screen opens Greensleeves to try it out.
+Download the exe from [Releases](../../releases) and run it; there's nothing to install. The same app also runs in a browser with Web MIDI (Chrome, Edge): **[open it on the web](https://jyarljung.github.io/accordion-trainer/)**. "Open the sample song" on the first screen opens Greensleeves to try it out.
 
 ### Roland V-Accordion
 Connect the USB COMPUTER port and the input is picked up automatically. To hear songs on the instrument's own sounds, set MIDI → Ext Seq → Accordion to On on the instrument, and choose "MIDI: Roland Arranger" as the track's sound.

@@ -20,7 +20,7 @@ MIDI가 없는 일반 아코디언도 버튼식이든 건반식이든 화면의 
 - 같은 레인을 같은 버튼으로 다시 클릭하면 되돌립니다.
 
 ## 시작하기
-[Releases](../../releases)에서 exe를 받아 실행합니다(설치 불필요). Web MIDI를 지원하는 브라우저(Chrome, Edge)에서도 같은 프로그램이 동작합니다. 처음 화면의 "샘플 곡 열기"로 Greensleeves를 바로 열어 볼 수 있습니다.
+[Releases](../../releases)에서 exe를 받아 실행합니다(설치 불필요). Web MIDI를 지원하는 브라우저(Chrome, Edge)에서도 같은 프로그램이 동작합니다: **[웹에서 바로 실행](https://jyarljung.github.io/accordion-trainer/)**. 처음 화면의 "샘플 곡 열기"로 Greensleeves를 바로 열어 볼 수 있습니다.
 
 ### Roland V-Accordion
 USB COMPUTER 단자로 연결하면 입력이 자동으로 잡힙니다. 악기 음색으로 곡을 들으려면 악기의 MIDI → Ext Seq → Accordion을 On으로 두고, 트랙의 음색을 "MIDI: Roland Arranger"로 고르세요.
