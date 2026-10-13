@@ -15,6 +15,7 @@ import { PartPlayer, type Route } from './io/player';
 import { engine, ITALIAN_ACCORDION, presetValue, STANDARD_DRUMS } from './io/synth';
 import { PartVoice } from './io/voice';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
+import { setLang, systemLang, t as tr } from './i18n';
 import type { Geometry } from './view/geometry';
 import { Metronome, type Click } from './io/metronome';
 import { BeatSwing } from './view/beatSwing';
@@ -63,6 +64,20 @@ const ui = {
   metronomeUnit: $<HTMLSelectElement>('metronomeUnit'),
   rowGapLabel: $('rowGapLabel'),
 };
+
+// The language: the system's (Korean or English) unless chosen in the settings. Text built in
+// code is rebuilt on a change; the canvas picks it up on the next frame.
+const languageSelect = $<HTMLSelectElement>('language');
+function applyLanguage(): void {
+  const v = languageSelect.value;
+  setLang(v === 'ko' || v === 'en' ? v : systemLang());
+}
+persist(languageSelect, 'language', applyLanguage);
+languageSelect.addEventListener('change', () => {
+  applyLanguage();
+  renderTracks();
+  refreshPorts();
+});
 
 // Right-hand button layouts, picked in the settings.
 const layouts: Record<string, Layout> = {
@@ -133,7 +148,7 @@ async function loadFile(file: File): Promise<void> {
   try {
     setSong(parseSong(await file.arrayBuffer(), file.name));
   } catch (e) {
-    alert(`MIDI 파일을 읽지 못했습니다.\n${e}`);
+    alert(`${tr('loadFailed')}\n${e}`);
   }
 }
 
@@ -190,12 +205,13 @@ function renderTracks(): void {
   for (const t of song.tracks) {
     const row = document.createElement('div');
     row.className = 'track-row';
-    row.title = `${t.name}\nch${t.channel} · ${t.noteCount}음 · ${noteName(t.minNote)}–${noteName(t.maxNote)}`;
+    const trackName = t.name || tr('track.fallback', { n: t.index + 1 });
+    row.title = `${trackName}\nch${t.channel} · ${tr('track.notes', { n: t.noteCount })} · ${noteName(t.minNote)}–${noteName(t.maxNote)}`;
     const name = document.createElement('span');
     name.className = 'track-name';
     const ch = document.createElement('small');
     ch.textContent = ` ch${t.channel}`;
-    name.append(t.name, ch);
+    name.append(trackName, ch);
     const pick = (part: 'tracks' | 'bassTracks', title: string) => {
       const cb = document.createElement('input');
       cb.type = 'checkbox';
@@ -208,7 +224,7 @@ function renderTracks(): void {
       return cb;
     };
     const voice = document.createElement('select');
-    voice.title = '이 트랙의 음색';
+    voice.title = tr('track.voice.tip');
     fillVoiceOptions(voice);
     voice.value = wantedVoice(t.index);
     voice.onchange = () => {
@@ -221,7 +237,7 @@ function renderTracks(): void {
     volume.max = '1';
     volume.step = '0.1';
     volume.value = String(volumeOf(t.index));
-    const volumeTitle = () => `볼륨 ${Math.round(Number(volume.value) * 100)}%`;
+    const volumeTitle = () => tr('track.volume.tip', { n: Math.round(Number(volume.value) * 100) });
     volume.title = volumeTitle();
     volume.oninput = () => {
       trackVolumes.set(t.index, Number(volume.value));
@@ -230,14 +246,14 @@ function renderTracks(): void {
     };
     const mute = document.createElement('input');
     mute.type = 'checkbox';
-    mute.title = '음소거';
+    mute.title = tr('tracks.mute');
     mute.checked = mutedTracks.has(t.index);
     mute.onchange = () => {
       if (mute.checked) mutedTracks.add(t.index);
       else mutedTracks.delete(t.index);
       applyVolumes();
     };
-    row.append(name, voice, volume, mute, pick('tracks', '오른손'), pick('bassTracks', '베이스'));
+    row.append(name, voice, volume, mute, pick('tracks', tr('tracks.right.tip')), pick('bassTracks', tr('tracks.bass.tip')));
     ui.trackRows.append(row);
   }
 }
@@ -298,7 +314,7 @@ ui.transpose.onchange = () => {
 };
 
 $<HTMLButtonElement>('resetPrefs').onclick = () => {
-  if (!confirm('저장된 설정을 모두 지우고 기본값으로 다시 시작할까요?')) return;
+  if (!confirm(tr('resetPrefs.confirm'))) return;
   resetPrefs();
   location.reload();
 };
@@ -564,7 +580,7 @@ for (const [part, select] of [['right', ui.chRight], ['bass', ui.chBass], ['chor
 function refreshPorts(): void {
   const inputs = midi.inputs();
   const current = midi.inputId;
-  ui.midiIn.replaceChildren(new Option(midi.supported ? '없음' : '미지원 브라우저', ''));
+  ui.midiIn.replaceChildren(new Option(tr(midi.supported ? 'input.none' : 'input.unsupported'), ''));
   for (const p of inputs) ui.midiIn.append(new Option(p.name, p.id));
   // Keep the current input; otherwise prefer something that looks like the accordion.
   const savedName = getPref('midiIn');
@@ -635,7 +651,7 @@ ui.rightLayout.addEventListener('change', applyRightLayout);
 // kit for a drum track) or a MIDI output. (State at the top.)
 function voiceChoices(): { label: string; value: string }[] {
   return [
-    ...engine.presets.map(p => ({ label: p.drum ? `[드럼] ${p.name}` : p.name, value: presetValue(p) })),
+    ...engine.presets.map(p => ({ label: p.drum ? tr('drumPrefix') + p.name : p.name, value: presetValue(p) })),
     ...midi.outputs().map(p => ({ label: `MIDI: ${p.name}`, value: `midi:${p.id}` })),
   ];
 }
@@ -893,7 +909,7 @@ midi.onPortsChanged = refreshPorts;
 refreshPorts();
 void midi.init().then(refreshPorts);
 // The voice lists fill once the SoundFont is in.
-engine.ready.then(renderTracks, e => showError(new Error(`음색(SoundFont)을 불러오지 못했습니다: ${e}`)));
+engine.ready.then(renderTracks, e => showError(new Error(`${tr('soundFailed')}: ${e}`)));
 
 // ---------- frame loop ----------
 
@@ -999,8 +1015,8 @@ function step(now: number): void {
   if (!draggingSeek && transport.duration > 0) {
     ui.seek.value = String(Math.round((t / transport.duration) * 1000));
   }
-  ui.time.textContent = `${fmt(t)} / ${fmt(transport.duration)}${transport.waiting ? ' · 대기 중' : ''}`;
-  ui.lastCh.textContent = midi.lastChannel ? `최근 입력 ch${midi.lastChannel}` : '';
+  ui.time.textContent = `${fmt(t)} / ${fmt(transport.duration)}${transport.waiting ? ` · ${tr('waiting')}` : ''}`;
+  ui.lastCh.textContent = midi.lastChannel ? tr('lastChannel', { ch: midi.lastChannel }) : '';
 }
 requestAnimationFrame(frame);
 

@@ -13,59 +13,59 @@
         <span id="time" class="mono">0:00 / 0:00</span>
         <span class="sep"></span>
         <span class="cat">
-          <span class="cat-title">속도</span>
+          <span class="cat-title" data-i18n="speed">속도</span>
           <input type="range" id="rate" min="0.25" max="1.5" step="0.05" value="1" />
           <span id="rateLabel" class="mono">100%</span>
         </span>
         <span class="sep"></span>
-        <span class="cat" title="마디 단위로 구간을 반복합니다">
-          <span class="cat-title">구간 반복</span>
-          <button id="loopA" title="구간 시작: 지금 마디의 처음. 이미 이 마디에 있으면 해제, 오른쪽 클릭도 해제">A</button>
-          <button id="loopB" title="구간 끝: 지금 마디의 끝. 이미 이 마디에 있으면 해제, 오른쪽 클릭도 해제">B</button>
+        <span class="cat" data-i18n-title="loop.tip">
+          <span class="cat-title" data-i18n="loop">구간 반복</span>
+          <button id="loopA" data-i18n-title="loopA.tip">A</button>
+          <button id="loopB" data-i18n-title="loopB.tip">B</button>
         </span>
         <span class="sep"></span>
         <span class="cat">
-          <span class="cat-title" title="메트로놈 볼륨. 0%면 꺼집니다. 마디 첫 박은 높은 소리">메트로놈</span>
-          <input type="range" id="metronome" min="0" max="1" step="0.1" value="0" title="메트로놈 볼륨. 0%면 꺼집니다. 마디 첫 박은 높은 소리" />
-          <select id="metronomeUnit" title="클릭 간격: 2분은 두 박마다(원이 한 번 왕복할 때), 4분은 박마다(원이 끝에 닿을 때), 8분은 박 사이에도 작은 소리로">
-            <option value="half">2분</option>
-            <option value="quarter" selected>4분</option>
-            <option value="eighth">8분</option>
+          <span class="cat-title" data-i18n="metronome" data-i18n-title="metronome.tip">메트로놈</span>
+          <input type="range" id="metronome" min="0" max="1" step="0.1" value="0" data-i18n-title="metronome.tip" />
+          <select id="metronomeUnit" data-i18n-title="metronomeUnit.tip">
+            <option value="half" data-i18n="unit.half">2분</option>
+            <option value="quarter" selected data-i18n="unit.quarter">4분</option>
+            <option value="eighth" data-i18n="unit.eighth">8분</option>
           </select>
-          <span id="beatSwing" title="원이 박마다 양 끝을 오갑니다. 오른손 건반을 누르면 그때 원이 있던 자리에 흐린 원이 남습니다(입력 지연 반영): 끝에 남으면 박에 맞게 친 것입니다"></span>
+          <span id="beatSwing" data-i18n-title="beatSwing.tip"></span>
         </span>
         <span class="spacer"></span>
         <span class="menu-anchor">
-          <button id="settingsBtn" title="악기 연결, 화면 설정">⚙</button>
+          <button id="settingsBtn" data-i18n-title="settings.tip">⚙</button>
           <div id="settings" class="menu" hidden>
             <div class="menu-group">
-              <span class="cat-title">MIDI 입력</span>
-              <label>입력 <select id="midiIn"></select></label>
+              <span class="cat-title" data-i18n="midiInput">MIDI 입력</span>
+              <label><span data-i18n="input">입력</span> <select id="midiIn"></select></label>
               <span class="group">
-                <label title="악기 입력과 MIDI 출력에 쓰는 채널">채널 오른손 <select id="chRight"></select></label>
-                <label>베이스 <select id="chBass"></select></label>
-                <label>코드 <select id="chChord"></select></label>
+                <label data-i18n-title="channels.tip"><span data-i18n="channelRight">채널 오른손</span> <select id="chRight"></select></label>
+                <label><span data-i18n="bass">베이스</span> <select id="chBass"></select></label>
+                <label><span data-i18n="chord">코드</span> <select id="chChord"></select></label>
               </span>
               <span id="lastCh" class="muted"></span>
               <span class="group">
-                <label title="악기 입력이 늦게 도착하는 만큼 판정을 앞당겨 맞춥니다">입력 지연 <input type="range" id="latency" min="0" max="300" step="5" value="0" /></label>
+                <label data-i18n-title="latency.tip"><span data-i18n="latency">입력 지연</span> <input type="range" id="latency" min="0" max="300" step="5" value="0" /></label>
                 <span id="latencyLabel" class="mono">0ms</span>
               </span>
             </div>
             <div class="menu-group">
-              <span class="cat-title">건반 배열</span>
-              <label title="오른손 버튼 배열. B 시스템은 C 시스템의 1열과 3열을 맞바꾼 배열로, 화면의 레인이 반대쪽으로 기웁니다">오른손 <select id="rightLayout">
-                <option value="c">C 시스템</option>
-                <option value="b">B 시스템 (바얀)</option>
-                <option value="piano">피아노 건반</option>
+              <span class="cat-title" data-i18n="keyboardLayout">건반 배열</span>
+              <label data-i18n-title="rightLayout.tip"><span data-i18n="rightHand">오른손</span> <select id="rightLayout">
+                <option value="c" data-i18n="layout.c">C 시스템</option>
+                <option value="b" data-i18n="layout.b">B 시스템 (바얀)</option>
+                <option value="piano" data-i18n="layout.piano">피아노 건반</option>
               </select></label>
-              <label class="button-only"><input type="checkbox" id="helpers" /> 4·5열 표시</label>
+              <label class="button-only"><input type="checkbox" id="helpers" /> <span data-i18n="helpers">4·5열 표시</span></label>
               <span class="group button-only">
-                <label title="오른손 줄 사이 간격(버튼 간격 대비). 실제 버튼 배치는 약 0.87(√3/2)입니다">줄 간격 <input type="range" id="rowGap" min="0.35" max="0.9" step="0.01" value="0.5" /></label>
+                <label data-i18n-title="rowGap.tip"><span data-i18n="rowGap">줄 간격</span> <input type="range" id="rowGap" min="0.35" max="0.9" step="0.01" value="0.5" /></label>
                 <span id="rowGapLabel" class="mono">0.50</span>
               </span>
-              <span class="group piano-only" title="칠 수 있는 건반의 범위. 화면에는 88건반이 모두 보이고, 범위 밖의 건반은 흐리게 표시되며 판정에서 빠집니다">
-                범위 지정
+              <span class="group piano-only" data-i18n-title="pianoRange.tip">
+                <span data-i18n="pianoRange">범위 지정</span>
                 <span id="pianoLowLabel" class="mono range-note">F3</span>
                 <span class="dual-range">
                   <span class="dual-track"></span>
@@ -77,15 +77,23 @@
               </span>
             </div>
             <div class="menu-group">
-              <span class="cat-title">화면</span>
-              <label title="곧 칠 버튼을 건반에 미리 보여 줍니다"><input type="checkbox" id="upcoming" checked /> 다음 누를 버튼 표시</label>
-              <label><input type="checkbox" id="mirror" /> 위아래 반전</label>
-              <label><input type="checkbox" id="mirrorX" /> 좌우 반전</label>
-              <label><input type="checkbox" id="noteNames" checked /> 노트에 음 이름 표시</label>
-              <label title="베이스 롤 레인을 C C# D … 순서로 (끄면 보드와 같은 5도 순서)"><input type="checkbox" id="bassChromatic" /> 베이스 반음 순서</label>
+              <span class="cat-title" data-i18n="display">화면</span>
+              <label data-i18n-title="upcoming.tip"><input type="checkbox" id="upcoming" checked /> <span data-i18n="upcoming">다음 누를 버튼 표시</span></label>
+              <label><input type="checkbox" id="mirror" /> <span data-i18n="mirror">위아래 반전</span></label>
+              <label><input type="checkbox" id="mirrorX" /> <span data-i18n="mirrorX">좌우 반전</span></label>
+              <label><input type="checkbox" id="noteNames" checked /> <span data-i18n="noteNames">노트에 음 이름 표시</span></label>
+              <label data-i18n-title="bassChromatic.tip"><input type="checkbox" id="bassChromatic" /> <span data-i18n="bassChromatic">베이스를 반음 순서로 표시</span></label>
+            </div>
+            <div class="menu-group">
+              <span class="cat-title">언어 · Language</span>
+              <select id="language">
+                <option value="auto" data-i18n="lang.auto">자동 (시스템 언어)</option>
+                <option value="ko">한국어</option>
+                <option value="en">English</option>
+              </select>
             </div>
             <div class="menu-foot">
-              <button id="resetPrefs" title="저장된 설정을 모두 지우고 기본값으로 시작">설정 초기화</button>
+              <button id="resetPrefs" data-i18n="resetPrefs" data-i18n-title="resetPrefs.tip">설정 초기화</button>
             </div>
           </div>
         </span>
@@ -93,9 +101,9 @@
       <div id="toolbarBody">
         <div class="bar">
           <span class="cat">
-            <span class="cat-title">음높이</span>
-            <label>조옮김 <select id="transpose"></select></label>
-            <label title="베이스와 코드 소리를 옥타브 단위로 옮깁니다 (화면의 버튼과 노트는 그대로)">베이스 옥타브 <select id="bassOctave">
+            <span class="cat-title" data-i18n="pitch">음높이</span>
+            <label><span data-i18n="transpose">조옮김</span> <select id="transpose"></select></label>
+            <label data-i18n-title="bassOctave.tip"><span data-i18n="bassOctave">베이스 옥타브</span> <select id="bassOctave">
               <option value="1">+1</option>
               <option value="0" selected>0</option>
               <option value="-1">-1</option>
@@ -103,14 +111,14 @@
           </span>
           <span class="sep"></span>
           <span class="cat">
-            <span class="cat-title" title="체크한 파트의 노트를 칠 때까지 기다립니다. 놓친 곳은 그 자리에서 멈추고, 함께 시작하는 음과 버튼을 모두 동시에 누르고 있어야 진행합니다. 둘 다 끄면 재생 모드입니다">연습 모드</span>
-            <label title="오른손 노트를 칠 때까지 기다립니다"><input type="checkbox" id="practiceRight" /> 오른손</label>
-            <label title="베이스 음과 코드를 칠 때까지 기다립니다. 베이스 음은 같은 음을 내는 버튼(기본 베이스, 카운터) 어느 것이든, 코드는 그 코드 버튼이면 맞습니다"><input type="checkbox" id="practiceBass" /> 베이스</label>
+            <span class="cat-title" data-i18n="practice" data-i18n-title="practice.tip">연습 모드</span>
+            <label data-i18n-title="practiceRight.tip"><input type="checkbox" id="practiceRight" /> <span data-i18n="rightHand">오른손</span></label>
+            <label data-i18n-title="practiceBass.tip"><input type="checkbox" id="practiceBass" /> <span data-i18n="bass">베이스</span></label>
             <span class="group practice-only">
-              <label title="연습 모드에서 이 시간 안에 누르면 맞음으로 칩니다 (앞뒤)">판정 <input type="range" id="hitWindow" min="50" max="200" step="10" value="120" /></label>
+              <label data-i18n-title="hitWindow.tip"><span data-i18n="hitWindow">판정</span> <input type="range" id="hitWindow" min="50" max="200" step="10" value="120" /></label>
               <span id="hitWindowLabel" class="mono">120ms</span>
             </span>
-            <label class="practice-only" title="연습 중인 파트의 소리를 내 건반에 맞춥니다: 노트는 도착할 때 소리 나기 시작하고, 판정 안에서 맞게 치면 그 건반을 뗄 때 멈춥니다. 놓친 뒤나 틀린 음은 누르는 동안만 소리 납니다"><input type="checkbox" id="followInput" /> 내 연주로 소리내기</label>
+            <label class="practice-only" data-i18n-title="followInput.tip"><input type="checkbox" id="followInput" /> <span data-i18n="followInput">내 연주로 소리내기</span></label>
           </span>
         </div>
       </div>
@@ -120,18 +128,25 @@
       <div id="parts" class="empty">
         <div class="song-bar">
           <span id="songName"></span>
-          <button id="openOther" title="다른 MIDI 파일을 엽니다 (파일을 끌어다 놓아도 됩니다)">다른 곡 열기</button>
+          <button id="openOther" data-i18n="openOther" data-i18n-title="openOther.tip">다른 곡 열기</button>
         </div>
-        <div class="track-head"><span>트랙</span><span title="트랙의 음을 낼 악기 (GeneralUser GS 사운드폰트) 또는 MIDI 출력">음색</span><span>볼륨</span><span>음소거</span><span title="이 트랙을 오른손 파트로">오른손</span><span title="이 트랙을 베이스 파트로">베이스</span></div>
+        <div class="track-head">
+          <span data-i18n="tracks.track">트랙</span>
+          <span data-i18n="tracks.voice" data-i18n-title="tracks.voice.tip">음색</span>
+          <span data-i18n="tracks.volume">볼륨</span>
+          <span data-i18n="tracks.mute">음소거</span>
+          <span data-i18n="tracks.right" data-i18n-title="tracks.right.tip">오른손</span>
+          <span data-i18n="tracks.bass" data-i18n-title="tracks.bass.tip">베이스</span>
+        </div>
         <div id="trackRows" class="track-rows"></div>
         <label class="drop-zone">
-          <span class="btn">MIDI 파일 열기</span>
-          <span class="muted">또는 MIDI 파일을 여기로 끌어다 놓으세요</span>
+          <span class="btn" data-i18n="openMidi">MIDI 파일 열기</span>
+          <span class="muted" data-i18n="dropMidi">또는 MIDI 파일을 여기로 끌어다 놓으세요</span>
           <input type="file" id="file" accept=".mid,.midi" hidden />
         </label>
       </div>
     </main>
-    <div id="error" hidden title="오류가 났습니다. 클릭하면 닫힙니다"></div>
+    <div id="error" hidden data-i18n-title="error.tip"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

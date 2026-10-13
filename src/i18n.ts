@@ -1,0 +1,203 @@
+// The app's words in Korean and English. The language follows the system (Korean there, English
+// anywhere else) unless chosen in the settings. Static text in index.html names its string with
+// data-i18n (text) or data-i18n-title (tooltip); code asks t() for the rest.
+
+export type Lang = 'ko' | 'en';
+
+const ko = {
+  speed: '속도',
+  loop: '구간 반복',
+  'loop.tip': '마디 단위로 구간을 반복합니다',
+  'loopA.tip': '구간 시작: 지금 마디의 처음. 이미 이 마디에 있으면 해제, 오른쪽 클릭도 해제',
+  'loopB.tip': '구간 끝: 지금 마디의 끝. 이미 이 마디에 있으면 해제, 오른쪽 클릭도 해제',
+  metronome: '메트로놈',
+  'metronome.tip': '메트로놈 볼륨. 0%면 꺼집니다. 마디 첫 박은 높은 소리',
+  'metronomeUnit.tip': '클릭 간격: 2분은 두 박마다(원이 한 번 왕복할 때), 4분은 박마다(원이 끝에 닿을 때), 8분은 박 사이에도 작은 소리로',
+  'unit.half': '2분',
+  'unit.quarter': '4분',
+  'unit.eighth': '8분',
+  'beatSwing.tip': '원이 박마다 양 끝을 오갑니다. 오른손 건반을 누르면 그때 원이 있던 자리에 흐린 원이 남습니다(입력 지연 반영): 끝에 남으면 박에 맞게 친 것입니다',
+  'settings.tip': '악기 연결, 건반 배열, 화면 설정',
+  midiInput: 'MIDI 입력',
+  input: '입력',
+  'input.none': '없음',
+  'input.unsupported': '미지원 브라우저',
+  'channels.tip': '악기 입력과 MIDI 출력에 쓰는 채널',
+  channelRight: '채널 오른손',
+  bass: '베이스',
+  chord: '코드',
+  lastChannel: '최근 입력 ch{ch}',
+  latency: '입력 지연',
+  'latency.tip': '악기 입력이 늦게 도착하는 만큼 판정을 앞당겨 맞춥니다',
+  keyboardLayout: '건반 배열',
+  rightHand: '오른손',
+  'rightLayout.tip': '오른손 버튼 배열. B 시스템은 C 시스템의 1열과 3열을 맞바꾼 배열로, 화면의 레인이 반대쪽으로 기웁니다',
+  'layout.c': 'C 시스템',
+  'layout.b': 'B 시스템 (바얀)',
+  'layout.piano': '피아노 건반',
+  helpers: '4·5열 표시',
+  rowGap: '줄 간격',
+  'rowGap.tip': '오른손 줄 사이 간격(버튼 간격 대비). 실제 버튼 배치는 약 0.87(√3/2)입니다',
+  pianoRange: '범위 지정',
+  'pianoRange.tip': '칠 수 있는 건반의 범위. 화면에는 88건반이 모두 보이고, 범위 밖의 건반은 어둡게 표시되며 판정에서 빠집니다',
+  display: '화면',
+  upcoming: '다음 누를 버튼 표시',
+  'upcoming.tip': '곧 칠 버튼을 건반에 미리 보여 줍니다',
+  mirror: '위아래 반전',
+  mirrorX: '좌우 반전',
+  noteNames: '노트에 음 이름 표시',
+  bassChromatic: '베이스를 반음 순서로 표시',
+  'bassChromatic.tip': '베이스 롤 레인을 C C# D … 순서로 (끄면 보드와 같은 5도 순서)',
+  'lang.auto': '자동 (시스템 언어)',
+  resetPrefs: '설정 초기화',
+  'resetPrefs.tip': '저장된 설정을 모두 지우고 기본값으로 시작',
+  'resetPrefs.confirm': '저장된 설정을 모두 지우고 기본값으로 다시 시작할까요?',
+  pitch: '음높이',
+  transpose: '조옮김',
+  bassOctave: '베이스 옥타브',
+  'bassOctave.tip': '베이스와 코드 소리를 옥타브 단위로 옮깁니다 (화면의 버튼과 노트는 그대로)',
+  practice: '연습 모드',
+  'practice.tip': '체크한 파트의 노트를 칠 때까지 기다립니다. 놓친 곳은 그 자리에서 멈추고, 함께 시작하는 음과 버튼을 모두 동시에 누르고 있어야 진행합니다. 둘 다 끄면 재생 모드입니다',
+  'practiceRight.tip': '오른손 노트를 칠 때까지 기다립니다',
+  'practiceBass.tip': '베이스 음과 코드를 칠 때까지 기다립니다. 베이스 음은 같은 음을 내는 버튼(기본 베이스, 카운터) 어느 것이든, 코드는 그 코드 버튼이면 맞습니다',
+  hitWindow: '판정',
+  'hitWindow.tip': '연습 모드에서 이 시간 안에 누르면 맞음으로 칩니다 (앞뒤)',
+  followInput: '내 연주로 소리내기',
+  'followInput.tip': '연습 중인 파트의 소리를 내 건반에 맞춥니다: 노트는 도착할 때 소리 나기 시작하고, 판정 안에서 맞게 치면 그 건반을 뗄 때 멈춥니다. 놓친 뒤나 틀린 음은 누르는 동안만 소리 납니다',
+  openOther: '다른 곡 열기',
+  'openOther.tip': '다른 MIDI 파일을 엽니다 (파일을 끌어다 놓아도 됩니다)',
+  'tracks.track': '트랙',
+  'tracks.voice': '음색',
+  'tracks.voice.tip': '트랙의 음을 낼 악기 (GeneralUser GS 사운드폰트) 또는 MIDI 출력',
+  'tracks.volume': '볼륨',
+  'tracks.mute': '음소거',
+  'tracks.right': '오른손',
+  'tracks.right.tip': '이 트랙을 오른손 파트로',
+  'tracks.bass': '베이스',
+  'tracks.bass.tip': '이 트랙을 베이스 파트로',
+  'track.fallback': '트랙 {n}',
+  'track.notes': '{n}음',
+  'track.voice.tip': '이 트랙의 음색',
+  'track.volume.tip': '볼륨 {n}%',
+  drumPrefix: '[드럼] ',
+  openMidi: 'MIDI 파일 열기',
+  dropMidi: '또는 MIDI 파일을 여기로 끌어다 놓으세요',
+  'error.tip': '오류가 났습니다. 클릭하면 닫힙니다',
+  loadFailed: 'MIDI 파일을 읽지 못했습니다.',
+  soundFailed: '음색(SoundFont)을 불러오지 못했습니다',
+  waiting: '대기 중',
+  pressure: '압력',
+};
+
+export type Key = keyof typeof ko;
+
+const en: Record<Key, string> = {
+  speed: 'Speed',
+  loop: 'Loop',
+  'loop.tip': 'Repeats a section, bar by bar',
+  'loopA.tip': 'Loop start: the start of the current bar. Press again in the same bar, or right-click, to clear it',
+  'loopB.tip': 'Loop end: the end of the current bar. Press again in the same bar, or right-click, to clear it',
+  metronome: 'Metronome',
+  'metronome.tip': 'Metronome volume; 0% turns it off. The first beat of each bar clicks higher',
+  'metronomeUnit.tip': 'Click spacing: half notes click every two beats (one full swing of the dot), quarters on every beat (as the dot reaches an end), eighths also softly in between',
+  'unit.half': 'Half',
+  'unit.quarter': 'Quarter',
+  'unit.eighth': 'Eighth',
+  'beatSwing.tip': 'The dot swings from end to end on every beat. A right-hand key press leaves a faint dot where it was (input delay taken off): at an end means on the beat',
+  'settings.tip': 'Instrument, keyboard layout and display settings',
+  midiInput: 'MIDI input',
+  input: 'Input',
+  'input.none': 'None',
+  'input.unsupported': 'Not supported by this browser',
+  'channels.tip': 'Channels used for the instrument’s input and for MIDI output',
+  channelRight: 'Channels: right hand',
+  bass: 'Bass',
+  chord: 'Chords',
+  lastChannel: 'Last input: ch{ch}',
+  latency: 'Input delay',
+  'latency.tip': 'Judges presses earlier by as much as the instrument’s input arrives late',
+  keyboardLayout: 'Keyboard layout',
+  rightHand: 'Right hand',
+  'rightLayout.tip': 'Right-hand layout. The B-system swaps rows 1 and 3 of the C-system, so the lanes lean the other way',
+  'layout.c': 'C-system',
+  'layout.b': 'B-system (bayan)',
+  'layout.piano': 'Piano keyboard',
+  helpers: 'Show rows 4–5',
+  rowGap: 'Row gap',
+  'rowGap.tip': 'Gap between the right-hand rows, relative to the button spacing. Real boards are about 0.87 (√3/2)',
+  pianoRange: 'Range played',
+  'pianoRange.tip': 'The keys you can play. All 88 keys are shown; keys outside the range are darker and left out of judging',
+  display: 'Display',
+  upcoming: 'Show the next buttons',
+  'upcoming.tip': 'Outlines the buttons coming up next',
+  mirror: 'Flip vertically',
+  mirrorX: 'Flip horizontally',
+  noteNames: 'Note names on notes',
+  bassChromatic: 'Bass lanes in semitone order',
+  'bassChromatic.tip': 'Bass roll lanes in C C# D … order (off: in fifths, as on the board)',
+  'lang.auto': 'Automatic (system language)',
+  resetPrefs: 'Reset settings',
+  'resetPrefs.tip': 'Clears all saved settings and starts from the defaults',
+  'resetPrefs.confirm': 'Clear all saved settings and restart with the defaults?',
+  pitch: 'Pitch',
+  transpose: 'Transpose',
+  bassOctave: 'Bass octave',
+  'bassOctave.tip': 'Moves the bass and chord sound by octaves (the buttons and notes on screen stay put)',
+  practice: 'Practice',
+  'practice.tip': 'Waits until you play the checked parts. It stops where you miss and goes on once everything starting together is held down at once. With both off, the song just plays',
+  'practiceRight.tip': 'Waits for the right-hand notes',
+  'practiceBass.tip': 'Waits for the bass notes and chords. A bass note counts on any button that sounds it (bass or counter-bass), a chord on its chord button',
+  hitWindow: 'Timing',
+  'hitWindow.tip': 'In practice, a press this close to its note (early or late) counts as right',
+  followInput: 'Sound follows my playing',
+  'followInput.tip': 'The practised parts sound by your keys: a note starts as it arrives and, played right in time, stops when you let go of its key. After a miss, or for a wrong note, it sounds only while held',
+  openOther: 'Open another',
+  'openOther.tip': 'Opens another MIDI file (you can also drop one here)',
+  'tracks.track': 'Track',
+  'tracks.voice': 'Sound',
+  'tracks.voice.tip': 'The instrument a track plays on (GeneralUser GS SoundFont), or a MIDI output',
+  'tracks.volume': 'Volume',
+  'tracks.mute': 'Mute',
+  'tracks.right': 'Right',
+  'tracks.right.tip': 'Play this track with the right hand',
+  'tracks.bass': 'Bass',
+  'tracks.bass.tip': 'Play this track on the bass',
+  'track.fallback': 'Track {n}',
+  'track.notes': '{n} notes',
+  'track.voice.tip': 'This track’s sound',
+  'track.volume.tip': 'Volume {n}%',
+  drumPrefix: '[Drums] ',
+  openMidi: 'Open a MIDI file',
+  dropMidi: 'or drop a MIDI file here',
+  'error.tip': 'Something went wrong. Click to close',
+  loadFailed: 'Couldn’t read the MIDI file.',
+  soundFailed: 'Couldn’t load the sounds (SoundFont)',
+  waiting: 'waiting',
+  pressure: 'Bellows',
+};
+
+const STRINGS: Record<Lang, Record<Key, string>> = { ko, en };
+
+let current: Lang = systemLang();
+
+// Korean on a Korean system, English anywhere else.
+export function systemLang(): Lang {
+  return (navigator.language || '').toLowerCase().startsWith('ko') ? 'ko' : 'en';
+}
+
+export function lang(): Lang {
+  return current;
+}
+
+// A string, with {name} placeholders filled in.
+export function t(key: Key, vars: Record<string, string | number> = {}): string {
+  return STRINGS[current][key].replace(/\{(\w+)\}/g, (m, name: string) => (name in vars ? String(vars[name]) : m));
+}
+
+// Switches the language and rewrites the page's static text.
+export function setLang(l: Lang): void {
+  current = l;
+  document.documentElement.lang = l;
+  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n]')) el.textContent = t(el.dataset.i18n as Key);
+  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle as Key);
+}

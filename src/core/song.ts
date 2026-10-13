@@ -88,7 +88,7 @@ export function parseSong(data: ArrayBuffer, name: string): Song {
       drum: t.channel === 9,
     }));
     notes.push(...own);
-    tracks.push(trackInfo(index, decodeText(t.name).trim() || t.instrument.name || `트랙 ${index + 1}`, t.channel + 1, own));
+    tracks.push(trackInfo(index, decodeText(t.name).trim() || t.instrument.name, t.channel + 1, own));
   });
   const { firstBarEnd, ...grid } = beatGrid(midi);
   return fitLeadIn({ name, duration: midi.duration, tracks, notes: sortNotes(notes), firstBar: 1, ...grid }, firstBarEnd);

@@ -1,4 +1,5 @@
 import type { BassLayout, BassRow } from '../core/bassLayout';
+import { t } from '../i18n';
 import type { Geometry } from './geometry';
 import { drawButton, type Mark } from './grid';
 
@@ -45,5 +46,5 @@ export function drawBellows(ctx: CanvasRenderingContext2D, geo: Geometry, pressu
   ctx.font = '11px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('압력', geo.bassLabelX, y + h / 2);
+  ctx.fillText(t('pressure'), geo.bassLabelX, y + h / 2);
 }
