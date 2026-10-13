@@ -333,6 +333,26 @@ document.addEventListener('keydown', e => {
 });
 
 $('openOther').onclick = () => ui.file.click();
+
+// The sample song: Greensleeves for accordion (public domain, from the Mutopia Project), with its
+// "treble" and "bass" tracks given to the two parts straight away.
+$<HTMLButtonElement>('openSample').onclick = async e => {
+  e.preventDefault(); // it sits in the drop zone's label: don't open the file picker too
+  let s: Song;
+  try {
+    s = parseSong(await (await fetch('demo/greensleeves.mid')).arrayBuffer(), 'Greensleeves');
+  } catch (err) {
+    alert(`${tr('loadFailed')}\n${err}`);
+    return;
+  }
+  setSong(s);
+  if (!options) return;
+  const named = (name: string) => s.tracks.filter(t => t.name.toLowerCase() === name).map(t => t.index);
+  options.tracks = named('treble');
+  options.bassTracks = named('bass');
+  renderTracks();
+  rebuild();
+};
 ui.file.onchange = () => {
   const f = ui.file.files?.[0];
   if (f) loadFile(f);

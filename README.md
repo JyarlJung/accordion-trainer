@@ -24,3 +24,4 @@ npm run dist   # release/에 exe 생성
 이 프로그램은 MIT 라이선스입니다. 함께 배포하는 구성 요소의 라이선스는 `public/licenses/`에 있습니다.
 - SpessaSynth (spessasynth_lib, spessasynth_core): Apache License 2.0, © Spessasus
 - GeneralUser GS: © S. Christian Collins, GeneralUser GS License v2.0
+- 샘플 곡 `public/demo/greensleeves.mid`: Greensleeves (Traditional), 아코디언 편곡 Ralf Axel Gehlert, [Mutopia Project #1265](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1265), 퍼블릭 도메인
