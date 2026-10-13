@@ -4,6 +4,8 @@
 
 A falling-notes practice tool for the accordion, in the spirit of Synthesia. Open a MIDI file and the notes of both hands fall onto the buttons or keys you play them with: the treble on a C-system or B-system (bayan) button board or a piano keyboard, the bass on the Stradella board.
 
+https://github.com/user-attachments/assets/d34d6058-2042-4767-a283-51cd317efa61
+
 ## Practising with an electronic accordion
 Connect an electronic accordion such as a Roland V-Accordion over USB, and the app reads what you play:
 - **Practice mode** waits until you play each note — for the treble, the bass, or both. A chord counts once all its notes are held down together.
