@@ -9,9 +9,8 @@ import { Judge } from './core/judge';
 import { WaitMode, pressInWaitMode, type Waited } from './core/practice';
 import { BassJudge, type BassTarget } from './core/bassJudge';
 import { MidiIO, type Part } from './io/midi';
-import { BUILTIN_SETS, type SampleSet } from './io/audio';
 import { PartPlayer, type Route } from './io/player';
-import { userSampleSets } from './io/sampleSets';
+import { engine, ITALIAN_ACCORDION, presetValue, STANDARD_DRUMS } from './io/synth';
 import { PartVoice } from './io/voice';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
 import type { Geometry } from './view/geometry';
@@ -28,6 +27,7 @@ const ui = {
   topLine: $<HTMLInputElement>('topLine'),
   fit: $<HTMLInputElement>('fit'),
   transpose: $<HTMLSelectElement>('transpose'),
+  bassOctave: $<HTMLSelectElement>('bassOctave'),
   settingsBtn: $<HTMLButtonElement>('settingsBtn'),
   settings: $('settings'),
   play: $<HTMLButtonElement>('play'),
@@ -88,8 +88,6 @@ interface Sound {
   note: number;
 }
 const inputHeld = new Map<string, Sound[]>();
-const AUTO = 'auto';
-let sampleSets: SampleSet[] = [...BUILTIN_SETS];
 const trackVoices = new Map<number, string>(); // track index -> voice, for the current song
 const trackVolumes = new Map<number, number>(); // track index -> volume 0..1, for the current song
 const mutedTracks = new Set<number>(); // tracks silenced without losing their volume, for the current song
@@ -174,9 +172,6 @@ function rebuild(t = transport.time): void {
   bassJudge.windowSec = hitWindow();
   transport.duration = song.duration;
   makeClicks();
-  // Every track's voices now, not at their first note: a voice made then would still be loading
-  // its samples when that note plays.
-  for (const tr of song.tracks) for (const part of ['right', 'bass', 'chord', 'other'] as const) voiceOf(part, tr.index);
   seek(t, true);
 }
 
@@ -195,7 +190,7 @@ function seek(t: number, resetStats = false): void {
 
 function silence(): void {
   inputHeld.clear();
-  for (const { voice } of voices.values()) voice.sink.allOff();
+  for (const { voice } of voices.values()) voice.allOff();
   treble.stop();
   bass.stop();
   others.stop();
@@ -229,8 +224,7 @@ function renderTracks(): void {
     const voice = document.createElement('select');
     voice.title = '이 트랙의 음색';
     fillVoiceOptions(voice);
-    voice.value = trackVoices.get(t.index) ?? AUTO;
-    if (voice.selectedIndex < 0) voice.value = AUTO; // a MIDI output that isn't connected now
+    voice.value = wantedVoice(t.index);
     voice.onchange = () => {
       trackVoices.set(t.index, voice.value);
       syncVoices();
@@ -339,10 +333,12 @@ function togglePlay(): void {
   ui.play.textContent = transport.playing ? '❚❚' : '▶';
 }
 
-// Audio needs a user gesture to start; play and key presses both count.
+// Audio needs a user gesture to start: play, the instrument's keys (in the Electron shell; a
+// browser wants a click or a key first, so any one starts it).
+for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => engine.resume(), { once: true });
 function startSound(): void {
+  engine.resume();
   for (const { voice } of voices.values()) voice.start();
-  metronome.start();
 }
 
 // ---------- metronome ----------
@@ -392,7 +388,7 @@ function clickBeats(t: number): void {
     metronome.click((clicks[nextClick].time - t) / transport.rate, clicks[nextClick].kind, volume);
   }
 }
-ui.metronome.addEventListener('input', () => metronome.start());
+ui.metronome.addEventListener('input', () => engine.resume());
 ui.metronomeUnit.addEventListener('change', makeClicks);
 
 function clearLoop(): void {
@@ -559,42 +555,41 @@ function refreshPorts(): void {
   syncVoices();
 }
 
+// The bass octave: the bass and chord parts sound this many octaves up or down (as played back and
+// as played by the player's keys); the board and roll don't move.
+function bassShift(part: VoicePart): number {
+  return part === 'bass' || part === 'chord' ? 12 * Number(ui.bassOctave.value) : 0;
+}
+function applyBassOctave(): void {
+  silence(); // notes sounding were started at the old octave
+  for (const { part, voice } of voices.values()) voice.transpose = bassShift(part);
+}
+ui.bassOctave.addEventListener('change', applyBassOctave);
+persist(ui.bassOctave, 'bassOctave');
+
 // ---------- voices ----------
 
-// Each track picks its own sound: a sample set, the synth, or a MIDI output. "Auto" is the default
-// for the part the note plays in (the first set meant for the bass for the bass and chords, else
-// the right hand's). User sample sets arrive asynchronously (read from disk); built-in sets until
-// then. (State at the top.)
-function defaultVoice(part: VoicePart): string {
-  const want = part === 'bass' || part === 'chord' ? 'bass' : 'treble';
-  return `set:${(sampleSets.find(s => (s.part ?? 'treble') === want) ?? sampleSets[0]).id}`;
-}
-
+// Each track picks its own sound: a preset of the SoundFont (Italian Accordion by default, a drum
+// kit for a drum track) or a MIDI output. (State at the top.)
 function voiceChoices(): { label: string; value: string }[] {
   return [
-    ...sampleSets.map(s => ({ label: s.label, value: `set:${s.id}` })),
-    { label: '신시', value: 'synth' },
+    ...engine.presets.map(p => ({ label: p.drum ? `[드럼] ${p.name}` : p.name, value: presetValue(p) })),
     ...midi.outputs().map(p => ({ label: `MIDI: ${p.name}`, value: `midi:${p.id}` })),
   ];
 }
 
 function fillVoiceOptions(select: HTMLSelectElement): void {
-  select.append(new Option('자동', AUTO));
   for (const c of voiceChoices()) select.append(new Option(c.label, c.value));
 }
 
-// What a part of a track should sound with; a choice that's gone (an unplugged MIDI output) falls
-// back to the default.
-function wantedVoice(part: VoicePart, track: number): string {
-  const v = trackVoices.get(track);
-  return v && v !== AUTO && voiceChoices().some(c => c.value === v) ? v : defaultVoice(part);
-}
+const isDrumTrack = (track: number) => song?.tracks.find(t => t.index === track)?.channel === 10;
 
-function chooseVoice(voice: PartVoice, value: string, track: number): void {
-  voice.choose(value, sampleSets, volumeOf(track)).catch(e => {
-    const set = sampleSets.find(s => `set:${s.id}` === value);
-    alert(`음색을 불러오지 못했습니다: ${set?.label ?? value}\n${e}`);
-  });
+// What a track should sound with; a choice that's gone (an unplugged MIDI output) falls back to
+// the default.
+function wantedVoice(track: number): string {
+  const v = trackVoices.get(track);
+  if (v && voiceChoices().some(c => c.value === v)) return v;
+  return isDrumTrack(track) ? STANDARD_DRUMS : ITALIAN_ACCORDION;
 }
 
 // A part's MIDI channel; a track playing along keeps the channel it was written on.
@@ -607,24 +602,24 @@ function voiceOf(part: VoicePart, track: number): PartVoice {
   let entry = voices.get(key);
   if (!entry) {
     entry = { part, track, voice: new PartVoice(midi, () => channelOf(part, track)) };
-    entry.voice.setVolume(volumeOf(track));
+    entry.voice.transpose = bassShift(part);
     voices.set(key, entry);
   }
-  const want = wantedVoice(part, track);
-  if (entry.voice.value !== want) chooseVoice(entry.voice, want, track);
+  const want = wantedVoice(track);
+  if (entry.voice.value !== want) entry.voice.choose(want, volumeOf(track));
   return entry.voice;
 }
 
 function route(part: VoicePart, track: number): Route {
-  return { sink: voiceOf(part, track).sink, channel: channelOf(part, track) };
+  return { sink: voiceOf(part, track), channel: channelOf(part, track) };
 }
 
 // Brings every voice in use up to its track's choice, silencing first if any changes.
 function syncVoices(): void {
-  const stale = [...voices.values()].filter(e => e.voice.value !== wantedVoice(e.part, e.track));
+  const stale = [...voices.values()].filter(e => e.voice.value !== wantedVoice(e.track));
   if (stale.length === 0) return;
   silence();
-  for (const e of stale) chooseVoice(e.voice, wantedVoice(e.part, e.track), e.track);
+  for (const e of stale) e.voice.choose(wantedVoice(e.track), volumeOf(e.track));
 }
 
 ui.midiIn.onchange = () => {
@@ -832,13 +827,10 @@ function judgePress(note: number): void {
   }
 }
 midi.onPortsChanged = refreshPorts;
-// Pick the voice only once the user's sample sets are known, so a saved voice can be restored
-// (and the online GM set isn't fetched for nothing).
-void userSampleSets().then(list => {
-  sampleSets = [...list, ...BUILTIN_SETS];
-  refreshPorts();
-  void midi.init().then(refreshPorts);
-});
+refreshPorts();
+void midi.init().then(refreshPorts);
+// The voice lists fill once the SoundFont is in.
+engine.ready.then(renderTracks, e => showError(new Error(`음색(SoundFont)을 불러오지 못했습니다: ${e}`)));
 
 // ---------- frame loop ----------
 

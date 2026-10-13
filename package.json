@@ -1,7 +1,7 @@
 {
   "name": "accordion-trainer",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.2.0",
   "license": "MIT",
   "type": "module",
   "main": "electron/main.js",
@@ -10,7 +10,7 @@
     "app": "node scripts/dev-electron.js",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "dist": "npm run build && electron-builder --win portable && node scripts/copy-samples.js"
+    "dist": "npm run build && electron-builder --win portable"
   },
   "build": {
     "appId": "local.accordion-trainer",
@@ -28,7 +28,8 @@
     "@tonejs/midi": "^2.0.28",
     "electron": "^44.7.0",
     "electron-builder": "^26.15.3",
-    "tone": "^15.1.22",
+    "spessasynth_core": "4.3.22",
+    "spessasynth_lib": "4.3.14",
     "typescript": "^7.0.2",
     "vite": "^8.3.4"
   }

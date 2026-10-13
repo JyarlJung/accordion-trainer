@@ -1,5 +1,5 @@
 node_modules/
 dist/
 release*/
-# Local sample sets (may contain copyrighted game audio)
+# Old personal sample sets (unused since 0.2.0; may contain copyrighted game audio)
 samples/

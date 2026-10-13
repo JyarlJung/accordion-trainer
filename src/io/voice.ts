@@ -1,49 +1,56 @@
-import { MidiOutSink, SamplerSink, SynthSink, type NoteSink, type SampleSet } from './audio';
+import { MidiOutSink, type NoteSink } from './audio';
 import type { MidiIO } from './midi';
+import { engine, SynthChannelSink } from './synth';
 
-// One channel's sound: a sample set ('set:<id>'), the synth ('synth') or a MIDI output port
-// ('midi:<port id>'). The app keeps one per part and track, so each track can use its own reeds.
-export class PartVoice {
-  sink: NoteSink;
+// One part of one track's sound: a SoundFont preset ("sf:...", see synth.ts) or a MIDI output port
+// ("midi:<port id>"). Notes can be shifted by octaves on the way (the bass octave option).
+export class PartVoice implements NoteSink {
   value: string | null = null;
-  private readonly sampler = new SamplerSink();
-  private readonly synth = new SynthSink();
+  transpose = 0; // semitones; change it only with no notes sounding
+  private sink: NoteSink | null = null;
+  private synth: SynthChannelSink | null = null;
 
   // `channel` is the voice's MIDI channel, primed with the bellows level on a MIDI output.
-  constructor(private readonly midi: MidiIO, private readonly channel: () => number) {
-    this.sink = this.sampler;
-  }
+  constructor(private readonly midi: MidiIO, private readonly channel: () => number) {}
 
   get midiPort(): string | null {
     return this.value?.startsWith('midi:') ? this.value.slice(5) : null;
   }
 
-  // Switches to another sound; resolves once a sample set has loaded. The caller silences first.
-  choose(value: string, sets: SampleSet[], level: number): Promise<void> {
+  // Switches to another sound. The caller silences first.
+  choose(value: string, level: number): void {
     this.value = value;
     const port = this.midiPort;
-    if (value === 'synth') {
-      this.sink = this.synth;
-    } else if (port) {
+    if (port) {
       this.sink = new MidiOutSink(this.midi, port, level, [this.channel()]);
-    } else {
-      this.sink = this.sampler;
-      return this.sampler.load(sets.find(s => `set:${s.id}` === value)!);
+      return;
     }
-    return Promise.resolve();
+    if (this.synth) this.synth.setPreset(value);
+    else this.synth = new SynthChannelSink(value, level);
+    this.sink = this.synth;
   }
 
   // Audio needs a user gesture to start; play and key presses both count.
   start(): void {
-    if (this.sink === this.synth) void this.synth.start();
-    else if (this.sink === this.sampler) void this.sampler.start();
-    else if (this.sink instanceof MidiOutSink) this.sink.prime();
+    engine.resume();
+    if (this.sink instanceof MidiOutSink) this.sink.prime();
   }
 
-  // The voice's volume, 0..1: the app's own sounds, or the bellows level (CC11) on a MIDI output.
+  // The voice's volume, 0..1: the synth channel's volume, or the bellows level (CC11) on a MIDI output.
   setVolume(v: number): void {
-    this.sampler.setVolume(v);
-    this.synth.setVolume(v);
+    this.synth?.setVolume(v);
     if (this.sink instanceof MidiOutSink) this.sink.setLevel(v);
+  }
+
+  noteOn(note: number, velocity: number, channel: number): void {
+    this.sink?.noteOn(note + this.transpose, velocity, channel);
+  }
+
+  noteOff(note: number, channel: number): void {
+    this.sink?.noteOff(note + this.transpose, channel);
+  }
+
+  allOff(): void {
+    this.sink?.allOff();
   }
 }
