@@ -67,6 +67,8 @@ const ui = {
 
 // The language: the system's (Korean or English) unless chosen in the settings. Text built in
 // code is rebuilt on a change; the canvas picks it up on the next frame.
+$('version').textContent = `v${__APP_VERSION__}`;
+
 const languageSelect = $<HTMLSelectElement>('language');
 function applyLanguage(): void {
   const v = languageSelect.value;

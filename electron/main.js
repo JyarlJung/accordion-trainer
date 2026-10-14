@@ -1,4 +1,4 @@
-import { app, BrowserWindow, net, protocol, session } from 'electron';
+import { app, BrowserWindow, net, protocol, session, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -29,6 +29,11 @@ app.whenReady().then(() => {
     width: 1400, height: 900, backgroundColor: '#16161b', autoHideMenuBar: true, title: 'Accordion Trainer',
     // Sound may start from the instrument's keys, not only from a click.
     webPreferences: { backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' },
+  });
+  // Links that open a new window (the GitHub link) go to the system browser instead.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) void shell.openExternal(url);
+    return { action: 'deny' };
   });
   win.loadURL(devUrl ?? 'app://bundle/index.html');
   win.on('minimize', () => void win.webContents.executeJavaScript('window.accordionPause?.()').catch(() => {}));

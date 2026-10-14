@@ -51,6 +51,9 @@ header {
 .transport, .transport .cat { flex-wrap: nowrap; }
 .transport #seek { flex: 1 1 50%; width: auto; min-width: 120px; max-width: 50%; }
 .spacer { flex: 1; }
+/* GitHub link and version, at the far end of the toolbar's second row. */
+.about { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 12px; }
+.about:hover { color: var(--text); }
 #play { min-width: 56px; font-size: 15px; }
 #settingsBtn { font-size: 15px; padding: 1px 8px; }
 

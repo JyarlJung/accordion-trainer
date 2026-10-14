@@ -21,11 +21,20 @@ MIDI가 없는 일반 아코디언도 버튼식이든 건반식이든 화면의 
 - **오른쪽 클릭**: 같은 음들을 빼서 베이스 파트로 넘깁니다. 베이스 버튼과 코드로 치게 됩니다.
 - 같은 레인을 같은 버튼으로 다시 클릭하면 되돌립니다.
 
+## 단축키
+**Space** 재생/일시정지, **Home** 처음(구간이 있으면 구간 시작)으로, **← →** 마디 단위 이동, **↑ ↓** 속도 5%씩 조절.
+
 ## 시작하기
-[Releases](../../releases)에서 exe를 받아 실행합니다(설치 불필요). Web MIDI를 지원하는 브라우저(Chrome, Edge)에서도 같은 프로그램이 동작합니다: **[웹에서 바로 실행](https://jyarljung.github.io/accordion-trainer/)**. 처음 화면의 "샘플 곡 열기"로 Greensleeves를 바로 열어 볼 수 있습니다.
+- **Windows**: [Releases](../../releases)에서 exe를 받아 실행합니다(설치 불필요).
+- **웹**: Web MIDI를 지원하는 브라우저(Chrome, Edge)에서도 같은 프로그램이 동작합니다: **[웹에서 바로 실행](https://jyarljung.github.io/accordion-trainer/)**.
+- **안드로이드 태블릿·휴대폰**: **Chrome**에서 웹 버전을 열고 ⋮ 메뉴의 **앱 설치**(또는 **홈 화면에 추가**)를 누릅니다. 그 뒤로는 아이콘으로 전체 화면 실행되고, 인터넷 없이도 열립니다. 삼성 인터넷은 Web MIDI를 지원하지 않으니 Chrome으로 설치하세요. 화면은 가로로 눕혀서 씁니다.
+
+처음 화면의 "샘플 곡 열기"로 Greensleeves를 바로 열어 볼 수 있습니다.
 
 ### Roland V-Accordion
 USB COMPUTER 단자로 연결하면 입력이 자동으로 잡힙니다. 악기 음색으로 곡을 들으려면 악기의 MIDI → Ext Seq → Accordion을 On으로 두고, 트랙의 음색을 "MIDI: Roland Arranger"로 고르세요.
+
+안드로이드에서는 USB OTG 어댑터나 USB-C ↔ USB-B 케이블로 연결하고, 악기의 USB 드라이버를 Generic으로 둡니다([MENU] → System → USB Drv, [MENU/WRITE] → SYSTEM으로 저장한 뒤 악기를 껐다 켭니다). 기기에 "충전 중"만 뜨면 악기를 연결한 채로 기기를 재부팅하세요.
 
 ## 소리
 곡은 [SpessaSynth](https://github.com/spessasus/spessasynth_lib)로 재생하고, [GeneralUser GS](https://www.schristiancollins.com/generaluser) 사운드폰트를 함께 넣어 배포합니다(기본 음색 Italian Accordion).

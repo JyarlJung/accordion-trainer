@@ -21,11 +21,20 @@ When a song's treble part goes lower than you want to play with the right hand (
 - **Right-click**: the same notes move to the bass part instead, to play on the bass buttons and chords.
 - Click the same lane the same way again to undo.
 
+## Keyboard shortcuts
+**Space** plays and pauses, **Home** goes back to the start (or the loop's start), **← →** move by bars and **↑ ↓** change the speed by 5%.
+
 ## Getting started
-Download the exe from [Releases](../../releases) and run it; there's nothing to install. The same app also runs in a browser with Web MIDI (Chrome, Edge): **[open it on the web](https://jyarljung.github.io/accordion-trainer/)**. "Open the sample song" on the first screen opens Greensleeves to try it out.
+- **Windows**: download the exe from [Releases](../../releases) and run it; there's nothing to install.
+- **Web**: the same app runs in a browser with Web MIDI (Chrome, Edge): **[open it on the web](https://jyarljung.github.io/accordion-trainer/)**.
+- **Android tablet or phone**: open the web version in **Chrome** and choose **Install app** (or **Add to Home screen**) from the ⋮ menu. It then starts from its own icon, full screen and offline. Samsung Internet has no Web MIDI, so install it from Chrome. Turn the device sideways: the app needs a landscape screen.
+
+"Open the sample song" on the first screen opens Greensleeves to try it out.
 
 ### Roland V-Accordion
 Connect the USB COMPUTER port and the input is picked up automatically. To hear songs on the instrument's own sounds, set MIDI → Ext Seq → Accordion to On on the instrument, and choose "MIDI: Roland Arranger" as the track's sound.
+
+On Android, connect through a USB OTG adapter or a USB-C to USB-B cable, and set the instrument's USB driver to Generic ([MENU] → System → USB Drv, then save with [MENU/WRITE] → SYSTEM and turn the instrument off and on). If the device only says it's charging, restart it with the instrument connected.
 
 ## Sound
 Songs play through [SpessaSynth](https://github.com/spessasus/spessasynth_lib) with the [GeneralUser GS](https://www.schristiancollins.com/generaluser) SoundFont bundled (Italian Accordion by default).
