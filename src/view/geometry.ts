@@ -12,8 +12,11 @@ const PAD_X = 40;
 const PAD_Y = 20;
 const LABEL = 30; // row labels left of each board
 const ROLL_MIN = 0.25; // share of the height kept for the falling notes
-const BOARD_GAP = 0.35; // space around the bellows meter, in button pitches
-const METER = 0.3;
+const BOARD_GAP = 0.35; // space between the treble and bass boards, in button pitches
+const METER = 0.3; // bellows meter thickness, in button pitches; it stands at the bass board's outer side
+const METER_GAP = 0.25; // between the bass board and the meter
+// The bass board also gets the height a meter between the boards used to take.
+const BASS_EXTRA = METER + BOARD_GAP;
 const BUTTON = 0.46; // treble button radius as a fraction of a semitone lane
 const BASS_LANES = 1.1; // bass button pitch in treble lanes: about treble-button sized, since it doesn't line up with notes
 const BASS_ROW_GAP = 0.9;
@@ -23,6 +26,8 @@ const BASS_LABEL = 20; // bass row titles, this far outside the bass board, px
 const SIDE_GAP = 44; // between the bass board and the area beside it (room for the row titles), px
 const TRACKS_W = 490; // track table, px
 const PANEL_GAP = 12;
+const BASS_ROLL_MAX = 720; // widest the bass roll gets, px; on wider screens it stays by the bass board
+const BASS_ROLL_MIN = 260; // ... and narrowest: the bass board stops growing there
 // Piano keyboard: as tall as button rows 1-3 at a row gap of 0.50, in button pitches.
 const KEYS_UNITS = 2 * 0.5 + (2 * BUTTON) / 3;
 const KEY_ASPECT = 6.5; // longest a white key gets, in (average) key widths (a real piano's is about 6.3)
@@ -60,8 +65,7 @@ export class Geometry {
   readonly rollBottom: number; // the judgment line: top of the board's first row
   readonly lanesBottom: number; // lowest main-row judgment line plus a button
   readonly rhRowsTop: number;
-  readonly meterY: number;
-  readonly meterH: number;
+  readonly meter: Box; // bellows meter, upright beside the bass board
   readonly bassX0: number;
   readonly bassRowsTop: number;
   readonly bassBox: Box; // outer edges of the bass buttons
@@ -93,16 +97,18 @@ export class Geometry {
     const bassSpan = bass.columns + this.bassSlant * (this.bassRows - 1);
     const g = opts.rowGap;
     const rhUnits = layout.piano ? KEYS_UNITS : (opts.rows.length - 1) * g + (2 * BUTTON) / semis;
-    const bassScale = BASS_LANES / semis; // bass pitch relative to the treble pitch
-    const bassUnits = ((this.bassRows - 1) * BASS_ROW_GAP + 0.92) * bassScale;
-    const stack = rhUnits + BOARD_GAP + METER + BOARD_GAP + bassUnits;
+    const bassHeight = (this.bassRows - 1) * BASS_ROW_GAP + 0.92; // in bass pitches
+    const bassScale0 = BASS_LANES / semis; // bass pitch relative to the treble pitch, before growing
+    const bassUnits = bassHeight * bassScale0 + BASS_EXTRA;
+    const bassScale = bassUnits / bassHeight;
+    const stack = rhUnits + BOARD_GAP + bassUnits;
 
     this.left = PAD_X + LABEL;
     this.right = width - PAD_X;
     this.labelX = PAD_X + LABEL / 2;
     const availW = this.right - this.left, availH = height - 2 * PAD_Y;
     const byHeight = (availH * (1 - ROLL_MIN)) / stack;
-    const bassByWidth = availW / (bassSpan * bassScale);
+    const bassByWidth = availW / (bassSpan * bassScale0);
     let semitone = 0;
     if (layout.piano) {
       // The keys' length follows the height; their width the screen, within a key's proportions.
@@ -121,16 +127,21 @@ export class Geometry {
     this.lane = layout.piano ? semitone : p / semis;
     this.radius = (p / semis) * BUTTON;
     this.rowGap = p * g;
-    this.bassPitch = Math.min(p * bassScale, (availW * BASS_MAX_WIDTH) / bassSpan);
+    const meterW = p * METER, meterGap = p * METER_GAP;
+    // The bass board fills its band's height, short of a share of the width and of leaving the
+    // bass roll too narrow.
+    const roomForBoard = availW - TRACKS_W - PANEL_GAP - BASS_ROLL_MIN - SIDE_GAP - meterGap - meterW;
+    this.bassPitch = Math.max(8, Math.min(p * bassScale, (availW * BASS_MAX_WIDTH) / bassSpan, roomForBoard / bassSpan));
     this.bassRadius = this.bassPitch * 0.46;
     this.bassRowGap = this.bassPitch * BASS_ROW_GAP;
 
-    // Stack from the bottom up; the roll takes whatever is left on top.
-    this.bassRowsTop = height - PAD_Y - ((this.bassRows - 1) * this.bassRowGap + this.bassRadius * 2);
-    this.meterH = p * METER;
-    this.meterY = this.bassRowsTop - p * BOARD_GAP - this.meterH;
+    // Stack from the bottom up; the roll takes whatever is left on top. A bass board held back
+    // by the width sits in the middle of its band.
+    const bandTop = height - PAD_Y - bassUnits * p;
+    const boardH = (this.bassRows - 1) * this.bassRowGap + this.bassRadius * 2;
+    this.bassRowsTop = bandTop + Math.max(0, (bassUnits * p - boardH) / 2);
     this.keysH = layout.piano ? KEYS_UNITS * p : 0;
-    this.rhRowsTop = this.meterY - p * BOARD_GAP - (layout.piano ? this.keysH : (opts.rows.length - 1) * this.rowGap + this.radius * 2);
+    this.rhRowsTop = bandTop - p * BOARD_GAP - (layout.piano ? this.keysH : (opts.rows.length - 1) * this.rowGap + this.radius * 2);
     this.keysTop = this.rhRowsTop;
 
     // Default: treble row 1 on top (next to the roll), counter-bass on top (next to the bellows).
@@ -164,7 +175,7 @@ export class Geometry {
       const extent = Math.max(...xs) - Math.min(...xs) + this.lane;
       this.rhX0 = this.left + (availW - extent) / 2 + this.lane / 2 - Math.min(...xs);
     }
-    this.bassX0 = this.right - bassSpan * this.bassPitch + this.bassPitch / 2;
+    this.bassX0 = this.right - meterW - meterGap - bassSpan * this.bassPitch + this.bassPitch / 2;
 
     // Boxes in screen space (after mirroring).
     const span = (a: number, b: number) => (opts.flipX ? { left: this.fx(b), right: this.fx(a) } : { left: a, right: b });
@@ -174,9 +185,11 @@ export class Geometry {
       top: this.bassRowsTop,
       bottom: this.bassRowsTop + (this.bassRows - 1) * this.bassRowGap + this.bassRadius * 2,
     };
-    const side = { top: this.meterY, bottom: this.bassBox.bottom };
+    this.meter = { ...span(this.right - meterW, this.right), top: this.bassBox.top, bottom: this.bassBox.bottom };
+    const side = { top: bandTop, bottom: height - PAD_Y };
     this.tracksBox = { ...span(this.left, this.left + TRACKS_W), ...side };
-    this.bassRoll = { ...span(this.left + TRACKS_W + PANEL_GAP, bassLeft - SIDE_GAP), ...side };
+    const rollRight = bassLeft - SIDE_GAP;
+    this.bassRoll = { ...span(Math.max(this.left + TRACKS_W + PANEL_GAP, rollRight - BASS_ROLL_MAX), rollRight), ...side };
     this.bassLabelX = opts.flipX ? this.bassBox.right + BASS_LABEL : this.bassBox.left - BASS_LABEL;
   }
 

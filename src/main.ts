@@ -330,25 +330,32 @@ function mousePress(hit: { part: Part; notes: number[] }): void {
     holdKey(hit.part, n, [playFree(hit.part, n)]);
   }
 }
+let mouseDragging = false; // a press that started on a key or button, until the mouse lets go
 canvas.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
   const hit = stage.buttonAt(e.offsetX, e.offsetY);
   if (!hit) return;
   e.preventDefault();
   canvas.setPointerCapture(e.pointerId);
+  mouseDragging = true;
   mousePress(hit);
 });
-// Dragging across the board plays each key or button passed over (a glissando); off the board
-// the last one lets go.
+// Dragging across the board plays each key or button passed over (a glissando). Between round
+// buttons, or off the board, the last one lets go and the drag carries on.
 canvas.addEventListener('pointermove', e => {
-  if (!mouseHeld) return;
+  if (!mouseDragging) return;
   const hit = stage.buttonAt(e.offsetX, e.offsetY);
-  const same = hit && hit.part === mouseHeld.part && hit.notes.join() === mouseHeld.notes.join();
+  const same = hit && mouseHeld && hit.part === mouseHeld.part && hit.notes.join() === mouseHeld.notes.join();
   if (same) return;
   if (hit) mousePress(hit);
   else mouseRelease();
 });
-for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) canvas.addEventListener(type, mouseRelease);
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
+  canvas.addEventListener(type, () => {
+    mouseDragging = false;
+    mouseRelease();
+  });
+}
 for (let t = -12; t <= 12; t++) ui.transpose.append(new Option(t > 0 ? `+${t}` : String(t), String(t)));
 ui.transpose.value = '0';
 ui.transpose.onchange = () => {

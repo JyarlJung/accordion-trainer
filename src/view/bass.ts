@@ -27,24 +27,24 @@ export function drawBass(ctx: CanvasRenderingContext2D, geo: Geometry, layout: B
   }
 }
 
-// Bellows pressure (CC11) drawn as a bar in the gap between the two boards, as wide as the bass
-// board so the part panels beside it can use the height.
+// Bellows pressure (CC11) as an upright level meter at the bass board's outer side, filling from
+// the bottom, with its title above it.
 export function drawBellows(ctx: CanvasRenderingContext2D, geo: Geometry, pressure: number): void {
-  const x = geo.bassBox.left, w = geo.bassBox.right - x, y = geo.meterY, h = geo.meterH;
+  const { left: x, top: y } = geo.meter, w = geo.meter.right - x, h = geo.meter.bottom - y;
   ctx.fillStyle = 'rgba(255,255,255,0.05)';
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, h / 2);
+  ctx.roundRect(x, y, w, h, w / 2);
   ctx.fill();
-  const fill = w * Math.min(1, Math.max(0, pressure));
+  const fill = h * Math.min(1, Math.max(0, pressure));
   if (fill > 0) {
     ctx.fillStyle = `hsl(${40 - pressure * 40}, 85%, 55%)`;
     ctx.beginPath();
-    ctx.roundRect(x, y, fill, h, h / 2);
+    ctx.roundRect(x, y + h - fill, w, fill, w / 2);
     ctx.fill();
   }
   ctx.fillStyle = '#9a9aa5';
   ctx.font = '11px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(t('pressure'), geo.bassLabelX, y + h / 2);
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(t('pressure'), x + w / 2, y - 4);
 }
