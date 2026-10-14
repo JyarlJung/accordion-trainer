@@ -89,8 +89,14 @@ let layout = layouts.c;
 const transport = new Transport();
 const midi = new MidiIO();
 const bassLayout = new BassLayout(bassJson as BassLayoutDef);
-const canvas = $<HTMLCanvasElement>('stage');
-const stage = new Stage(canvas, layout, bassLayout);
+// Low-latency drawing: automatic (on unless there's a touch screen: tablets can tear), or as set.
+const lowLatencySelect = $<HTMLSelectElement>('lowLatency');
+const lowLatency = () => (lowLatencySelect.value === 'auto' ? navigator.maxTouchPoints === 0 : lowLatencySelect.value === 'on');
+persist(lowLatencySelect, 'lowLatency');
+const stage = new Stage($<HTMLCanvasElement>('stage'), layout, bassLayout, lowLatency());
+lowLatencySelect.addEventListener('change', () => stage.setLowLatency(lowLatency()));
+// Pointer input goes to the box around the canvas, which outlives a swapped canvas.
+const stageBox = $('stageBox');
 
 let song: Song | null = null;
 let options: ExtractOptions | null = null;
@@ -300,14 +306,14 @@ function cutAt(e: MouseEvent, toBass: boolean): void {
   options.cut = c && c.note === note && c.toBass === toBass ? null : { note, toBass };
   rebuild();
 }
-canvas.addEventListener('click', e => cutAt(e, false));
-canvas.addEventListener('contextmenu', e => {
+stageBox.addEventListener('click', e => cutAt(e, false));
+stageBox.addEventListener('contextmenu', e => {
   if (stage.buttonAt(e.offsetX, e.offsetY)) e.preventDefault(); // the boards have no right-click
   else cutAt(e, true);
 });
-canvas.addEventListener('mousemove', e => {
+stageBox.addEventListener('mousemove', e => {
   const x = e.offsetX, y = e.offsetY;
-  canvas.style.cursor = stage.buttonAt(x, y) || (song && stage.laneAt(x, y) !== null) ? 'pointer' : '';
+  stageBox.style.cursor = stage.buttonAt(x, y) || (song && stage.laneAt(x, y) !== null) ? 'pointer' : '';
 });
 
 // Keys and buttons on the boards play like the instrument's: a press goes in as MIDI input, so
@@ -331,18 +337,18 @@ function mousePress(hit: { part: Part; notes: number[] }): void {
   }
 }
 let mouseDragging = false; // a press that started on a key or button, until the mouse lets go
-canvas.addEventListener('pointerdown', e => {
+stageBox.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
   const hit = stage.buttonAt(e.offsetX, e.offsetY);
   if (!hit) return;
   e.preventDefault();
-  canvas.setPointerCapture(e.pointerId);
+  stageBox.setPointerCapture(e.pointerId);
   mouseDragging = true;
   mousePress(hit);
 });
 // Dragging across the board plays each key or button passed over (a glissando). Between round
 // buttons, or off the board, the last one lets go and the drag carries on.
-canvas.addEventListener('pointermove', e => {
+stageBox.addEventListener('pointermove', e => {
   if (!mouseDragging) return;
   const hit = stage.buttonAt(e.offsetX, e.offsetY);
   const same = hit && mouseHeld && hit.part === mouseHeld.part && hit.notes.join() === mouseHeld.notes.join();
@@ -351,7 +357,7 @@ canvas.addEventListener('pointermove', e => {
   else mouseRelease();
 });
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
-  canvas.addEventListener(type, () => {
+  stageBox.addEventListener(type, () => {
     mouseDragging = false;
     mouseRelease();
   });

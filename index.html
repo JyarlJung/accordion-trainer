@@ -82,6 +82,11 @@
               <label><input type="checkbox" id="mirror" /> <span data-i18n="mirror">위아래 반전</span></label>
               <label><input type="checkbox" id="mirrorX" /> <span data-i18n="mirrorX">좌우 반전</span></label>
               <label><input type="checkbox" id="noteNames" checked /> <span data-i18n="noteNames">노트에 음 이름 표시</span></label>
+              <label data-i18n-title="lowLatency.tip"><span data-i18n="lowLatency">저지연 그리기</span> <select id="lowLatency">
+                <option value="auto" data-i18n="lowLatency.auto">자동</option>
+                <option value="on" data-i18n="lowLatency.on">켜기</option>
+                <option value="off" data-i18n="lowLatency.off">끄기</option>
+              </select></label>
               <label data-i18n-title="bassChromatic.tip"><input type="checkbox" id="bassChromatic" /> <span data-i18n="bassChromatic">베이스를 반음 순서로 표시</span></label>
             </div>
             <div class="menu-group">
@@ -128,7 +133,7 @@
       </div>
     </header>
     <main>
-      <canvas id="stage"></canvas>
+      <div id="stageBox"><canvas id="stage"></canvas></div>
       <div id="parts" class="empty">
         <div class="song-bar">
           <span id="songName"></span>

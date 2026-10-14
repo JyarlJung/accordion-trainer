@@ -26,7 +26,7 @@ const MIN_W = 320;
 const MIN_H = 240;
 
 export class Stage {
-  private readonly ctx: CanvasRenderingContext2D;
+  private ctx: CanvasRenderingContext2D;
   private geo: Geometry | null = null;
   private geoKey = '';
   private flashes: { note: number; kind: HitResult; at: number }[] = [];
@@ -39,16 +39,35 @@ export class Stage {
   private onsets: { time: number; end: number; notes: BassNote[] }[] = [];
   onLayout?: (geo: Geometry) => void; // called whenever the board is laid out anew
 
+  private lowLatency: boolean;
+
   constructor(
-    private readonly canvas: HTMLCanvasElement,
+    private canvas: HTMLCanvasElement,
     private layout: Layout,
     private readonly bass: BassLayout,
+    lowLatency: boolean,
   ) {
-    // Low-latency canvas: presented without waiting in the compositor queue. Opaque, so each
-    // frame paints its own background. Not on Android, where it draws straight to the screen
-    // buffer and moving lines tear.
-    const desynchronized = !/Android/i.test(navigator.userAgent);
-    this.ctx = canvas.getContext('2d', { desynchronized, alpha: false })!;
+    this.lowLatency = lowLatency;
+    this.ctx = this.context();
+  }
+
+  // Opaque, so each frame paints its own background. Low-latency ("desynchronized") frames skip
+  // the compositor queue; some tablets then tear moving lines, so it can be turned off.
+  private context(): CanvasRenderingContext2D {
+    return this.canvas.getContext('2d', { desynchronized: this.lowLatency, alpha: false })!;
+  }
+
+  // A context keeps the options it was made with, so a change takes a fresh canvas in its place.
+  setLowLatency(on: boolean): void {
+    if (on === this.lowLatency) return;
+    this.lowLatency = on;
+    const fresh = document.createElement('canvas');
+    fresh.id = this.canvas.id;
+    this.canvas.replaceWith(fresh);
+    this.canvas = fresh;
+    this.ctx = this.context();
+    this.geo = null;
+    this.geoKey = '';
   }
 
   // The treble lane under a point of the roll or board, or null.

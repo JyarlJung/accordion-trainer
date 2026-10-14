@@ -189,6 +189,7 @@ main { flex: 1; min-height: 520px; max-height: max(80vw, 1024px); position: rela
 .drop-zone .btn { padding: 8px 20px; font-size: 15px; }
 #openSample { margin-top: 6px; font-size: 12px; }
 
+#stageBox { position: absolute; inset: 0; } /* holds the canvas, which is swapped when low-latency drawing changes */
 canvas { display: block; width: 100%; height: 100%; }
 
 /* An error caught in the frame loop, shown so it can be reported. */
