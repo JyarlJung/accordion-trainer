@@ -9,10 +9,10 @@
     <header id="toolbar">
       <div class="bar transport">
         <button id="play" class="primary" title="Space">▶</button>
-        <input type="range" id="seek" min="0" max="1000" value="0" />
+        <input type="range" id="seek" min="0" max="1000" value="0" data-i18n-title="seek.tip" />
         <span id="time" class="mono">0:00 / 0:00</span>
         <span class="sep"></span>
-        <span class="cat">
+        <span class="cat" data-i18n-title="speed.tip">
           <span class="cat-title" data-i18n="speed">속도</span>
           <input type="range" id="rate" min="0.25" max="1.5" step="0.05" value="1" />
           <span id="rateLabel" class="mono">100%</span>
@@ -85,6 +85,10 @@
               <label data-i18n-title="bassChromatic.tip"><input type="checkbox" id="bassChromatic" /> <span data-i18n="bassChromatic">베이스를 반음 순서로 표시</span></label>
             </div>
             <div class="menu-group">
+              <span class="cat-title" data-i18n="sound">소리</span>
+              <label data-i18n-title="defaultVoice.tip"><span data-i18n="defaultVoice">기본 음색</span> <select id="defaultVoice"></select></label>
+            </div>
+            <div class="menu-group">
               <span class="cat-title">언어 · Language</span>
               <select id="language">
                 <option value="auto" data-i18n="lang.auto">자동 (시스템 언어)</option>
@@ -139,7 +143,8 @@
           <span data-i18n="tracks.bass" data-i18n-title="tracks.bass.tip">베이스</span>
         </div>
         <div id="trackRows" class="track-rows"></div>
-        <label class="drop-zone">
+        <!-- for="file": otherwise the label would act for its first labelable child, the sample button -->
+        <label class="drop-zone" for="file">
           <span class="btn" data-i18n="openMidi">MIDI 파일 열기</span>
           <span class="muted" data-i18n="dropMidi">또는 MIDI 파일을 여기로 끌어다 놓으세요</span>
           <button id="openSample" data-i18n="openSample" data-i18n-title="openSample.tip">샘플 곡 열기 (Greensleeves)</button>

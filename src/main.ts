@@ -198,6 +198,7 @@ function silence(): void {
 
 // One row per track: its voice, its volume, a mute switch and a checkbox for each part.
 function renderTracks(): void {
+  fillDefaultVoice();
   ui.trackRows.replaceChildren();
   ui.parts.classList.toggle('empty', !song);
   if (!song || !options) return;
@@ -568,20 +569,32 @@ if (!navigator.userAgent.includes('Electron')) {
   });
 }
 
+// The bar start before t (a bar back when t is on one) or after it; the song's ends past the
+// first and last bars.
+function barStep(t: number, dir: -1 | 1): number {
+  const bars = song?.bars ?? [];
+  if (dir < 0) return bars.filter(b => b < t - 0.05).pop() ?? 0;
+  return bars.find(b => b > t + 0.05) ?? transport.duration;
+}
+
+function setRate(rate: number): void {
+  ui.rate.value = String(Math.min(Number(ui.rate.max), Math.max(Number(ui.rate.min), Math.round(rate * 100) / 100)));
+  ui.rate.dispatchEvent(new Event('input'));
+}
+
+// Space plays and pauses, Home goes back to the start (or the loop's), the left and right
+// arrows move by bars, the up and down arrows change the speed by 5%.
 window.addEventListener('keydown', e => {
   if (e.target instanceof HTMLInputElement && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
-  if (e.code === 'Space') {
-    e.preventDefault();
-    togglePlay();
-  } else if (e.code === 'ArrowLeft') {
-    e.preventDefault(); // a focused range input would also move itself
-    seek(transport.time - 2);
-  } else if (e.code === 'ArrowRight') {
-    e.preventDefault();
-    seek(transport.time + 2);
-  } else if (e.code === 'Home') {
-    seek(loop?.a ?? 0, true);
-  }
+  if (e.target instanceof HTMLSelectElement || e.ctrlKey || e.altKey || e.metaKey) return;
+  // A focused slider would also move itself on these keys.
+  if (['Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(e.code)) e.preventDefault();
+  if (e.code === 'Space') togglePlay();
+  else if (e.code === 'ArrowLeft') seek(barStep(transport.time, -1));
+  else if (e.code === 'ArrowRight') seek(barStep(transport.time, 1));
+  else if (e.code === 'ArrowUp') setRate(transport.rate + 0.05);
+  else if (e.code === 'ArrowDown') setRate(transport.rate - 0.05);
+  else if (e.code === 'Home') seek(loop?.a ?? 0, true);
 });
 
 // ---------- MIDI devices ----------
@@ -682,12 +695,33 @@ function fillVoiceOptions(select: HTMLSelectElement): void {
 
 const isDrumTrack = (track: number) => song?.tracks.find(t => t.index === track)?.channel === 10;
 
+// The sound tracks start with, drum tracks aside: chosen in the settings, Italian Accordion
+// until then (or when the choice is gone, like an unplugged MIDI output).
+const defaultVoiceSelect = $<HTMLSelectElement>('defaultVoice');
+function defaultVoice(): string {
+  const v = defaultVoiceSelect.value || getPref('defaultVoice');
+  return typeof v === 'string' && voiceChoices().some(c => c.value === v) ? v : ITALIAN_ACCORDION;
+}
+// Fills the choice from the voices there are (they come with the SoundFont and the MIDI ports).
+function fillDefaultVoice(): void {
+  const saved = getPref('defaultVoice');
+  defaultVoiceSelect.replaceChildren();
+  for (const c of voiceChoices()) if (!c.value.startsWith('sf:drum:')) defaultVoiceSelect.append(new Option(c.label, c.value));
+  const has = (v: unknown) => [...defaultVoiceSelect.options].some(o => o.value === v);
+  defaultVoiceSelect.value = has(saved) ? (saved as string) : ITALIAN_ACCORDION;
+}
+defaultVoiceSelect.addEventListener('change', () => {
+  setPref('defaultVoice', defaultVoiceSelect.value);
+  syncVoices();
+  renderTracks();
+});
+
 // What a track should sound with; a choice that's gone (an unplugged MIDI output) falls back to
 // the default.
 function wantedVoice(track: number): string {
   const v = trackVoices.get(track);
   if (v && voiceChoices().some(c => c.value === v)) return v;
-  return isDrumTrack(track) ? STANDARD_DRUMS : ITALIAN_ACCORDION;
+  return isDrumTrack(track) ? STANDARD_DRUMS : defaultVoice();
 }
 
 // A part's MIDI channel; a track playing along keeps the channel it was written on.

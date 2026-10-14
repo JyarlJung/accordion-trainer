@@ -6,6 +6,8 @@ export type Lang = 'ko' | 'en';
 
 const ko = {
   speed: '속도',
+  'speed.tip': '재생 속도 (↑ ↓ 키로 5%씩)',
+  'seek.tip': '← → 키로 마디 단위 이동, Home 키로 처음(구간이 있으면 구간 시작)으로',
   loop: '구간 반복',
   'loop.tip': '마디 단위로 구간을 반복합니다',
   'loopA.tip': '구간 시작: 지금 마디의 처음. 이미 이 마디에 있으면 해제, 오른쪽 클릭도 해제',
@@ -48,6 +50,9 @@ const ko = {
   noteNames: '노트에 음 이름 표시',
   bassChromatic: '베이스를 반음 순서로 표시',
   'bassChromatic.tip': '베이스 롤 레인을 C C# D … 순서로 (끄면 보드와 같은 5도 순서)',
+  sound: '소리',
+  defaultVoice: '기본 음색',
+  'defaultVoice.tip': '트랙이 처음에 쓰는 음색 (드럼 트랙 제외). 트랙 창에서 트랙마다 따로 고를 수 있습니다',
   'lang.auto': '자동 (시스템 언어)',
   resetPrefs: '설정 초기화',
   'resetPrefs.tip': '저장된 설정을 모두 지우고 기본값으로 시작',
@@ -95,6 +100,8 @@ export type Key = keyof typeof ko;
 
 const en: Record<Key, string> = {
   speed: 'Speed',
+  'speed.tip': 'Playback speed (↑ ↓ keys: 5% steps)',
+  'seek.tip': '← → keys move by bars; Home goes back to the start (or the loop’s start)',
   loop: 'Loop',
   'loop.tip': 'Repeats a section, bar by bar',
   'loopA.tip': 'Loop start: the start of the current bar. Press again in the same bar, or right-click, to clear it',
@@ -137,6 +144,9 @@ const en: Record<Key, string> = {
   noteNames: 'Note names on notes',
   bassChromatic: 'Bass lanes in semitone order',
   'bassChromatic.tip': 'Bass roll lanes in C C# D … order (off: in fifths, as on the board)',
+  sound: 'Sound',
+  defaultVoice: 'Default sound',
+  'defaultVoice.tip': 'The sound tracks start with (drum tracks aside); each track can still pick its own in the track table',
   'lang.auto': 'Automatic (system language)',
   resetPrefs: 'Reset settings',
   'resetPrefs.tip': 'Clears all saved settings and starts from the defaults',

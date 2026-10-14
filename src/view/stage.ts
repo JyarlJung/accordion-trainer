@@ -45,8 +45,10 @@ export class Stage {
     private readonly bass: BassLayout,
   ) {
     // Low-latency canvas: presented without waiting in the compositor queue. Opaque, so each
-    // frame paints its own background.
-    this.ctx = canvas.getContext('2d', { desynchronized: true, alpha: false })!;
+    // frame paints its own background. Not on Android, where it draws straight to the screen
+    // buffer and moving lines tear.
+    const desynchronized = !/Android/i.test(navigator.userAgent);
+    this.ctx = canvas.getContext('2d', { desynchronized, alpha: false })!;
   }
 
   // The treble lane under a point of the roll or board, or null.
