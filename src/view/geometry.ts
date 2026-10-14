@@ -31,8 +31,11 @@ const BASS_ROLL_MAX = 720; // widest the bass roll gets, px; on wider screens it
 const BASS_ROLL_MIN = 260; // ... and narrowest: the bass board stops growing there
 // Piano keyboard: as tall as button rows 1-3 at a row gap of 0.50, in button pitches.
 const KEYS_UNITS = 2 * 0.5 + (2 * BUTTON) / 3;
-const KEY_ASPECT = 6.5; // longest a white key gets, in (average) key widths (a real piano's is about 6.3)
-const KEY_MIN_ASPECT = 3.2; // ... and shortest: wide screens leave space at the sides instead
+const KEY_MIN_ASPECT = 3.2; // shortest a white key gets, in (average) key widths: wide screens leave space at the sides
+// The C-system board the piano keyboard is sized like (rows 1-3 at a row gap of 0.50): its span
+// in buttons (C3 to G7, three semitones a button) and how far its lanes lean per row.
+const REF_SPAN = (103 - 48) / 3 + 1;
+const REF_LEAN = 1 / 6 / 0.5;
 const WHITE_PER_SEMITONE = 12 / 7; // a white key's average width, in semitone lanes
 const BLACK_H = 0.62; // black key length, in white key lengths
 
@@ -112,11 +115,12 @@ export class Geometry {
     const bassByWidth = availW / (bassSpan * bassScale0);
     let semitone = 0;
     if (layout.piano) {
-      // The keys' length follows the height; their width the screen, within a key's proportions.
+      // Sized as the C-system board would be in the same window, so switching layouts keeps the
+      // roll, the boards and the panels where they are; the keys take the screen's width.
       // Lanes are one semitone each (one more for the half lanes the end keys stick out).
-      const p0 = Math.max(8, Math.min(byHeight, bassByWidth, MAX_PITCH));
-      semitone = Math.min(availW / (this.hi - this.lo + 2), (KEYS_UNITS * p0) / KEY_MIN_ASPECT / WHITE_PER_SEMITONE);
-      this.pitch = Math.max(8, Math.min(p0, (KEY_ASPECT * semitone * WHITE_PER_SEMITONE) / KEYS_UNITS));
+      const byWidth = Math.min((availW - availH * REF_LEAN) / (REF_SPAN - stack * REF_LEAN), bassByWidth);
+      this.pitch = Math.max(8, Math.min(byWidth > 0 ? byWidth : 8, byHeight, MAX_PITCH));
+      semitone = Math.min(availW / (this.hi - this.lo + 2), (KEYS_UNITS * this.pitch) / KEY_MIN_ASPECT / WHITE_PER_SEMITONE);
     } else {
       // Lanes lean by rowShift buttons per row, so the roll's height adds sideways extent:
       // width = span * p + rollHeight * k, with rollHeight = availH - stack * p.
