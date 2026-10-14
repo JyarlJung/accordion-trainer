@@ -15,8 +15,9 @@ const ROLL_MIN = 0.25; // share of the height kept for the falling notes
 const BOARD_GAP = 0.35; // space between the treble and bass boards, in button pitches
 const METER = 0.3; // bellows meter thickness, in button pitches; it stands at the bass board's outer side
 const METER_GAP = 0.25; // between the bass board and the meter
-// The bass board also gets the height a meter between the boards used to take.
-const BASS_EXTRA = METER + BOARD_GAP;
+// The bass board gets half the height a meter between the boards used to take; the other half
+// goes to the falling notes.
+const BASS_EXTRA = (METER + BOARD_GAP) / 2;
 const BUTTON = 0.46; // treble button radius as a fraction of a semitone lane
 const BASS_LANES = 1.1; // bass button pitch in treble lanes: about treble-button sized, since it doesn't line up with notes
 const BASS_ROW_GAP = 0.9;
@@ -24,7 +25,7 @@ const BASS_MAX_WIDTH = 0.55; // cap the bass board at this share of the width, s
 const MAX_PITCH = 140;
 const BASS_LABEL = 20; // bass row titles, this far outside the bass board, px
 const SIDE_GAP = 44; // between the bass board and the area beside it (room for the row titles), px
-const TRACKS_W = 490; // track table, px
+const TRACKS_W = 440; // track table, px
 const PANEL_GAP = 12;
 const BASS_ROLL_MAX = 720; // widest the bass roll gets, px; on wider screens it stays by the bass board
 const BASS_ROLL_MIN = 260; // ... and narrowest: the bass board stops growing there
