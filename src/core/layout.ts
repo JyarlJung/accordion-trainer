@@ -85,6 +85,11 @@ export class Layout {
     return this.byNote.has(note) && (!this.piano || (note >= this.playRange.low && note <= this.playRange.high));
   }
 
+  // Changes whenever the played range does (for redrawing what depends on it).
+  get playKey(): string {
+    return `${this.playRange.low}-${this.playRange.high}`;
+  }
+
   // The piano keys played (the rest are shown for reference only).
   setPlayRange(low: number, high: number): void {
     this.playRange = { low, high };

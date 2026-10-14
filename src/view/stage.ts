@@ -7,7 +7,7 @@ import { drawBassRoll } from './bassRoll';
 import { DUPLICATE, EXPECT, HIT, LIVE, UPCOMING, expectFill } from './colors';
 import { Geometry } from './geometry';
 import { drawGrid, type Mark } from './grid';
-import { drawLanes, drawNotes, type RollState } from './roll';
+import { drawLaneBackground, drawNotes, drawTimeLines, type RollState } from './roll';
 
 export interface ViewState extends RollState {
   held: ReadonlyMap<number, number>; // treble notes held on the instrument
@@ -29,6 +29,8 @@ export class Stage {
   private ctx: CanvasRenderingContext2D;
   private geo: Geometry | null = null;
   private geoKey = '';
+  private readonly still = document.createElement('canvas'); // see draw
+  private stillKey = '';
   private flashes: { note: number; kind: HitResult; at: number }[] = [];
   private onsetsFor: unknown = null;
   // When each note due now was first shown (real ms), for its arrival burst. Real time, so a burst
@@ -68,6 +70,7 @@ export class Stage {
     this.ctx = this.context();
     this.geo = null;
     this.geoKey = '';
+    this.stillKey = '';
   }
 
   // The treble lane under a point of the roll or board, or null.
@@ -116,7 +119,9 @@ export class Stage {
   }
 
   draw(s: ViewState): void {
-    const dpr = window.devicePixelRatio || 1;
+    // Tablets and phones draw at most 1.5 canvas pixels per screen pixel: their screens are
+    // dense enough not to show it, and filling 4-6 times a desktop's pixels made frames drop.
+    const dpr = Math.min(window.devicePixelRatio || 1, navigator.maxTouchPoints > 0 ? 1.5 : Infinity);
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     if (this.canvas.width !== Math.round(w * dpr) || this.canvas.height !== Math.round(h * dpr)) {
       this.canvas.width = Math.round(w * dpr);
@@ -132,17 +137,32 @@ export class Stage {
       this.onLayout?.(this.geo);
     }
     const ctx = this.ctx;
+    const geo = this.geo;
+    // The still layer (lanes, boards, labels) is drawn once per layout and copied in each frame;
+    // only what moves or lights up is drawn on top.
+    const stillKey = `${this.geoKey}:${dpr}:${s.cut?.note}:${s.cut?.toBass}:${this.layout.playKey}`;
+    if (stillKey !== this.stillKey) {
+      this.still.width = this.canvas.width;
+      this.still.height = this.canvas.height;
+      const sc = this.still.getContext('2d', { alpha: false })!;
+      sc.setTransform(dpr, 0, 0, dpr, 0, 0);
+      sc.fillStyle = '#16161b';
+      sc.fillRect(0, 0, w, h);
+      drawLaneBackground(sc, geo, this.layout, s.cut);
+      drawGrid(sc, geo, this.layout, null, s.cut?.note ?? null);
+      drawBass(sc, geo, this.bass, null);
+      this.stillKey = stillKey;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.still, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#16161b';
-    ctx.fillRect(0, 0, w, h);
 
     const now = performance.now();
     this.flashes = this.flashes.filter(f => now - f.at < FLASH_MS);
     this.frameMs = now;
     this.burstsShown.clear();
 
-    const geo = this.geo;
-    drawLanes(ctx, geo, this.layout, s);
+    drawTimeLines(ctx, geo, s);
     drawGrid(ctx, geo, this.layout, this.buildMarks(s), s.cut?.note ?? null);
     if (s.showUpcoming) this.drawMove(ctx, geo, s);
     drawNotes(ctx, geo, this.layout, s);

@@ -24,30 +24,25 @@ export interface RollState {
 
 const NOTE_ALPHA = 0.5;
 
-// Background: one diagonal lane per semitone (running on to its button), and the judgment line.
-export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, s: RollState): void {
+// Background: one diagonal lane per semitone (running on to its button), the cut-away lanes and
+// the judgment line. None of it moves, so it's drawn once into the still layer (see Stage).
+export function drawLaneBackground(ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout, cut: Cut | null): void {
   const y0 = geo.rollTop, y1 = geo.lanesBottom;
+  const band = (note: number, fill: string) => {
+    const a = geo.laneX(note, y0), b = geo.laneX(note, y1), w = geo.laneW(note);
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(a - w / 2, y0);
+    ctx.lineTo(a + w / 2, y0);
+    ctx.lineTo(b + w / 2, y1);
+    ctx.lineTo(b - w / 2, y1);
+    ctx.fill();
+  };
   for (let note = geo.lo; note <= geo.hi; note++) {
     const a = geo.laneX(note, y0), b = geo.laneX(note, y1), w = geo.laneW(note);
-    if (isBlack(note)) {
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.beginPath();
-      ctx.moveTo(a - w / 2, y0);
-      ctx.lineTo(a + w / 2, y0);
-      ctx.lineTo(b + w / 2, y1);
-      ctx.lineTo(b - w / 2, y1);
-      ctx.fill();
-    }
+    if (isBlack(note)) band(note, 'rgba(0,0,0,0.3)');
     // Lanes of piano keys beyond the played range, darkened.
-    if (!layout.playable(note)) {
-      ctx.fillStyle = 'rgba(8,8,12,0.35)';
-      ctx.beginPath();
-      ctx.moveTo(a - w / 2, y0);
-      ctx.lineTo(a + w / 2, y0);
-      ctx.lineTo(b + w / 2, y1);
-      ctx.lineTo(b - w / 2, y1);
-      ctx.fill();
-    }
+    if (!layout.playable(note)) band(note, 'rgba(8,8,12,0.35)');
     // Gold edge on the low side of each C lane.
     const side = Math.sign(geo.laneX(note + 1, y1) - b) * (w / 2);
     ctx.strokeStyle = note % 12 === 0 ? 'rgba(201,162,39,0.5)' : 'rgba(255,255,255,0.05)';
@@ -58,61 +53,11 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: 
     ctx.stroke();
   }
 
-  // Bar lines (with bar numbers) and faint beat lines across the roll.
-  {
-    const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;
-    const toY = (t: number) => geo.rollBottom - (t - s.time) * pps;
-    ctx.lineWidth = 1;
-    for (const t of s.beats) {
-      const y = toY(t);
-      if (y > geo.rollBottom || y < geo.rollTop) continue;
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-      ctx.beginPath();
-      ctx.moveTo(geo.left, y);
-      ctx.lineTo(geo.right, y);
-      ctx.stroke();
-    }
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    s.bars.forEach((t, i) => {
-      const y = toY(t);
-      if (y > geo.rollBottom || y < geo.rollTop) return;
-      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-      ctx.beginPath();
-      ctx.moveTo(geo.left, y);
-      ctx.lineTo(geo.right, y);
-      ctx.stroke();
-      ctx.fillStyle = '#7a7a86';
-      ctx.fillText(String(s.firstBar + i), geo.labelX, y);
-    });
-  }
-
-  if (s.loop) {
-    const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;
-    const ya = Math.min(geo.rollBottom, geo.rollBottom - (s.loop.a - s.time) * pps);
-    const yb = Math.max(geo.rollTop, geo.rollBottom - (s.loop.b - s.time) * pps);
-    if (ya > yb) {
-      ctx.fillStyle = 'rgba(255,213,79,0.06)';
-      ctx.fillRect(geo.left, yb, geo.right - geo.left, ya - yb);
-    }
-  }
-
   // Cut-away lanes, dimmed down through the board; tinted teal when they go to the bass.
-  if (s.cut) {
-    for (let note = geo.lo; note <= Math.min(geo.hi, s.cut.note); note++) {
-      const a = geo.laneX(note, y0), b = geo.laneX(note, y1), w = geo.laneW(note);
-      ctx.beginPath();
-      ctx.moveTo(a - w / 2, y0);
-      ctx.lineTo(a + w / 2, y0);
-      ctx.lineTo(b + w / 2, y1);
-      ctx.lineTo(b - w / 2, y1);
-      ctx.fillStyle = 'rgba(8,8,12,0.55)';
-      ctx.fill();
-      if (s.cut.toBass) {
-        ctx.fillStyle = 'rgba(56,190,180,0.10)';
-        ctx.fill();
-      }
+  if (cut) {
+    for (let note = geo.lo; note <= Math.min(geo.hi, cut.note); note++) {
+      band(note, 'rgba(8,8,12,0.55)');
+      if (cut.toBass) band(note, 'rgba(56,190,180,0.10)');
     }
   }
 
@@ -123,6 +68,45 @@ export function drawLanes(ctx: CanvasRenderingContext2D, geo: Geometry, layout: 
   ctx.moveTo(geo.left, geo.rollBottom);
   ctx.lineTo(geo.right, geo.rollBottom);
   ctx.stroke();
+}
+
+// Bar lines (with bar numbers), faint beat lines and the loop, moving down the roll.
+export function drawTimeLines(ctx: CanvasRenderingContext2D, geo: Geometry, s: RollState): void {
+  const pps = (geo.rollBottom - geo.rollTop) / s.lookahead;
+  const toY = (t: number) => geo.rollBottom - (t - s.time) * pps;
+  ctx.lineWidth = 1;
+  for (const t of s.beats) {
+    const y = toY(t);
+    if (y > geo.rollBottom || y < geo.rollTop) continue;
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath();
+    ctx.moveTo(geo.left, y);
+    ctx.lineTo(geo.right, y);
+    ctx.stroke();
+  }
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  s.bars.forEach((t, i) => {
+    const y = toY(t);
+    if (y > geo.rollBottom || y < geo.rollTop) return;
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(geo.left, y);
+    ctx.lineTo(geo.right, y);
+    ctx.stroke();
+    ctx.fillStyle = '#7a7a86';
+    ctx.fillText(String(s.firstBar + i), geo.labelX, y);
+  });
+
+  if (s.loop) {
+    const ya = Math.min(geo.rollBottom, toY(s.loop.a));
+    const yb = Math.max(geo.rollTop, toY(s.loop.b));
+    if (ya > yb) {
+      ctx.fillStyle = 'rgba(255,213,79,0.06)';
+      ctx.fillRect(geo.left, yb, geo.right - geo.left, ya - yb);
+    }
+  }
 }
 
 // Notes: translucent, sheared along their lane, bottom edge level. A note is due when its

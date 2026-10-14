@@ -8,22 +8,27 @@ const ROW_TITLES: Record<BassRow, string> = {
   counter: '', bass: '', major: 'Maj', minor: 'min', seventh: '7th', dim: 'dim',
 };
 
-export function drawBass(ctx: CanvasRenderingContext2D, geo: Geometry, layout: BassLayout, marks: Map<string, Mark>): void {
+// The bass board: every button plain (no marks) for the still layer, or only the marked ones.
+export function drawBass(ctx: CanvasRenderingContext2D, geo: Geometry, layout: BassLayout, marks: Map<string, Mark> | null): void {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  ctx.font = `600 ${Math.max(10, geo.radius * 0.5)}px system-ui, sans-serif`;
-  ctx.fillStyle = '#9a9aa5';
-  layout.def.rows.forEach((row, i) => ctx.fillText(ROW_TITLES[row], geo.bassLabelX, geo.bassLineY(i)));
+  if (!marks) {
+    ctx.font = `600 ${Math.max(10, geo.radius * 0.5)}px system-ui, sans-serif`;
+    ctx.fillStyle = '#9a9aa5';
+    layout.def.rows.forEach((row, i) => ctx.fillText(ROW_TITLES[row], geo.bassLabelX, geo.bassLineY(i)));
+  }
 
   for (const b of layout.buttons) {
+    const m = marks?.get(b.id);
+    if (marks && !m) continue;
     const { x, y } = geo.bassPos(b);
     const single = b.row === 'bass' || b.row === 'counter';
     drawButton(ctx, x, y, geo.bassRadius * (single ? 1 : 0.86), b.label, {
       base: b.row === 'bass' ? '#ebe7de' : b.row === 'counter' ? '#cfc9bb' : '#3a3a44',
       text: single ? '#222' : '#d8d8d8',
       landmark: b.marker,
-    }, marks.get(b.id));
+    }, m);
   }
 }
 

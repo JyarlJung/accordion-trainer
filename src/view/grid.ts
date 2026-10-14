@@ -1,4 +1,4 @@
-import { noteName, type Layout } from '../core/layout';
+import { isBlack, noteName, type Layout } from '../core/layout';
 import { C_MARK, ROW_COLORS, WRONG } from './colors';
 import type { Geometry } from './geometry';
 
@@ -62,9 +62,11 @@ export function drawButton(
   }
 }
 
+// The treble board. With no marks it draws every button, plain, for the still layer (see Stage);
+// with marks, only the marked buttons, over it.
 export function drawGrid(
   ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout,
-  marks: Map<string, Mark>, cutNote: number | null,
+  marks: Map<string, Mark> | null, cutNote: number | null,
 ): void {
   if (layout.piano) {
     drawKeyboard(ctx, geo, layout, marks, cutNote);
@@ -75,17 +77,20 @@ export function drawGrid(
   ctx.textBaseline = 'middle';
 
   // Row numbers to the left of each row.
-  ctx.font = `600 ${Math.max(11, r * 0.6)}px system-ui, sans-serif`;
-  for (const row of layout.rows) {
-    if (!geo.showsRow(row.row)) continue;
-    ctx.fillStyle = ROW_COLORS[row.row] ?? '#888';
-    ctx.fillText(String(row.row), geo.labelX, geo.rowLineY(row.row));
+  if (!marks) {
+    ctx.font = `600 ${Math.max(11, r * 0.6)}px system-ui, sans-serif`;
+    for (const row of layout.rows) {
+      if (!geo.showsRow(row.row)) continue;
+      ctx.fillStyle = ROW_COLORS[row.row] ?? '#888';
+      ctx.fillText(String(row.row), geo.labelX, geo.rowLineY(row.row));
+    }
   }
 
   for (const b of layout.buttons) {
     if (b.note < geo.lo || b.note > geo.hi || !geo.showsRow(b.row)) continue;
+    const m = marks?.get(b.id);
+    if (marks && !m) continue;
     const { x, y } = geo.pos(b);
-    const m = marks.get(b.id);
     const cut = cutNote !== null && b.note <= cutNote;
     // Marked buttons are drawn in full; unmarked cut-away and helper buttons dimmed.
     ctx.globalAlpha = m ? 1 : cut ? 0.3 : b.role === 'helper' ? 0.55 : 1;
@@ -105,15 +110,26 @@ export function drawGrid(
 // ring runs inside the key's edge and a cross sits near its front end.
 function drawKeyboard(
   ctx: CanvasRenderingContext2D, geo: Geometry, layout: Layout,
-  marks: Map<string, Mark>, cutNote: number | null,
+  marks: Map<string, Mark> | null, cutNote: number | null,
 ): void {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const keys = [...layout.buttons].sort((a, b) => Number(a.black) - Number(b.black));
+  let keys = [...layout.buttons].sort((a, b) => Number(a.black) - Number(b.black));
+  if (marks) {
+    // The marked keys, plus the black keys beside a marked white key: it reaches under them, so
+    // they're drawn again on top.
+    const marked = new Set(keys.filter(b => marks.has(b.id)).map(b => b.note));
+    for (const n of [...marked]) {
+      if (isBlack(n)) continue;
+      if (isBlack(n - 1)) marked.add(n - 1);
+      if (isBlack(n + 1)) marked.add(n + 1);
+    }
+    keys = keys.filter(b => marked.has(b.note));
+  }
   for (const b of keys) {
     const k = geo.keyRect(b.note);
     const w = k.right - k.left, h = k.bottom - k.top;
-    const m = marks.get(b.id);
+    const m = marks?.get(b.id);
     // Keys beyond the played range are shown for reference, in darker colours with the
     // background's blue tint (not see-through, so the keys behind don't show).
     const off = !layout.playable(b.note);
