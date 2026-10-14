@@ -216,6 +216,7 @@ function renderTracks(): void {
     const pick = (part: 'tracks' | 'bassTracks', title: string) => {
       const cb = document.createElement('input');
       cb.type = 'checkbox';
+      cb.dataset.column = part;
       cb.title = title;
       cb.checked = opts[part].includes(t.index);
       cb.onchange = () => {
@@ -247,6 +248,7 @@ function renderTracks(): void {
     };
     const mute = document.createElement('input');
     mute.type = 'checkbox';
+    mute.dataset.column = 'mute';
     mute.title = tr('tracks.mute');
     mute.checked = mutedTracks.has(t.index);
     mute.onchange = () => {
@@ -258,6 +260,34 @@ function renderTracks(): void {
     ui.trackRows.append(row);
   }
 }
+
+// The track table's checkboxes can be painted: press one and drag over the others in its column,
+// and they all take the state the first one switched to.
+let painting: { column: string; checked: boolean } | null = null;
+function paint(cb: HTMLInputElement): void {
+  if (!painting || cb.dataset.column !== painting.column || cb.checked === painting.checked) return;
+  cb.checked = painting.checked;
+  cb.dispatchEvent(new Event('change'));
+}
+ui.trackRows.addEventListener('pointerdown', e => {
+  const cb = e.target;
+  if (e.button !== 0 || !(cb instanceof HTMLInputElement) || !cb.dataset.column) return;
+  e.preventDefault(); // the switch happens here, not on the click that follows
+  painting = { column: cb.dataset.column, checked: !cb.checked };
+  paint(cb);
+});
+window.addEventListener('pointermove', e => {
+  if (!painting) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (el instanceof HTMLInputElement) paint(el);
+});
+window.addEventListener('pointerup', () => {
+  painting = null;
+});
+// A mouse click on a checkbox would switch it back; keyboard toggling (no pointer) still works.
+ui.trackRows.addEventListener('click', e => {
+  if (e.target instanceof HTMLInputElement && e.target.dataset.column && e.detail > 0) e.preventDefault();
+});
 
 // Clicking a treble lane cuts it and every lane below it out of the right hand; a right click
 // hands that range to the bass instead. One cut at a time: a new click replaces it, and the
@@ -288,12 +318,7 @@ function mouseRelease(): void {
   for (const n of mouseHeld.notes) midi.simulate(n, false, midi.channels[mouseHeld.part]);
   mouseHeld = null;
 }
-canvas.addEventListener('pointerdown', e => {
-  if (e.button !== 0) return;
-  const hit = stage.buttonAt(e.offsetX, e.offsetY);
-  if (!hit) return;
-  e.preventDefault();
-  canvas.setPointerCapture(e.pointerId);
+function mousePress(hit: { part: Part; notes: number[] }): void {
   mouseRelease();
   mouseHeld = hit;
   for (const n of hit.notes) {
@@ -304,6 +329,24 @@ canvas.addEventListener('pointerdown', e => {
     startSound();
     holdKey(hit.part, n, [playFree(hit.part, n)]);
   }
+}
+canvas.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const hit = stage.buttonAt(e.offsetX, e.offsetY);
+  if (!hit) return;
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  mousePress(hit);
+});
+// Dragging across the board plays each key or button passed over (a glissando); off the board
+// the last one lets go.
+canvas.addEventListener('pointermove', e => {
+  if (!mouseHeld) return;
+  const hit = stage.buttonAt(e.offsetX, e.offsetY);
+  const same = hit && hit.part === mouseHeld.part && hit.notes.join() === mouseHeld.notes.join();
+  if (same) return;
+  if (hit) mousePress(hit);
+  else mouseRelease();
 });
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) canvas.addEventListener(type, mouseRelease);
 for (let t = -12; t <= 12; t++) ui.transpose.append(new Option(t > 0 ? `+${t}` : String(t), String(t)));

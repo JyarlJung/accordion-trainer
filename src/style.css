@@ -18,7 +18,10 @@ html, body {
   font: 13px/1.4 system-ui, 'Malgun Gothic', sans-serif;
 }
 
-body { display: flex; flex-direction: column; }
+/* The board keeps a workable size: below 1280 px wide or with too little height the page scrolls
+   instead of squeezing the boards and panels; on a tall screen it stops at 4:5 (height to width),
+   since a longer roll leans its lanes off the sides and shrinks the boards. */
+body { display: flex; flex-direction: column; min-width: 1280px; }
 
 header {
   background: var(--panel);
@@ -134,7 +137,7 @@ button.active { outline: 2px solid #ffd54f; }
 @keyframes swing-fade { from { opacity: 0.6; } to { opacity: 0; } }
 #midiIn, #defaultVoice { max-width: 200px; }
 
-main { flex: 1; min-height: 0; position: relative; }
+main { flex: 1; min-height: 520px; max-height: max(80vw, 1024px); position: relative; }
 
 /* Track table beside the bass roll; main.ts sets its box from the board layout. */
 #parts {
@@ -154,6 +157,7 @@ main { flex: 1; min-height: 0; position: relative; }
 .track-head > :not(:first-child), .track-row > input { justify-self: center; margin: 0; }
 .track-row select { width: 100%; min-width: 0; padding: 1px 4px; }
 .track-row input[type=range] { width: 100%; margin: 0; }
+.track-row input[type=checkbox] { touch-action: none; } /* dragging over them paints, not scrolls */
 .track-rows { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .track-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track-name small { color: var(--muted); }
