@@ -1,0 +1,8 @@
+icon.svg, icons/*.png and the desktop app icon
+
+The accordion emoji (U+1FA97) from Twemoji, recoloured for Accordion Trainer (treble end
+violet, bass end teal, bellows lavender); the drawing is otherwise unchanged.
+
+Twemoji graphics by Twitter, Inc and other contributors (now maintained at jdecked/twemoji).
+Licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Source: https://github.com/jdecked/twemoji (assets/svg/1fa97.svg)

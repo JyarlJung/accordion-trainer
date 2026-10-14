@@ -1143,3 +1143,9 @@ if (import.meta.env.DEV) {
     },
   });
 }
+
+// On the web the app installs as a PWA and works offline (public/sw.js). Not in the desktop app
+// (app://) or the dev server (http), where a cache would only get in the way.
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}

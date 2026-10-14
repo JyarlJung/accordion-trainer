@@ -41,4 +41,5 @@ npm run dist   # builds the exe into release/
 MIT. Licences of the bundled components are in `public/licenses/`.
 - SpessaSynth (spessasynth_lib, spessasynth_core): Apache License 2.0, © Spessasus
 - GeneralUser GS: © S. Christian Collins, GeneralUser GS License v2.0
+- App icon: the Twemoji accordion (🪗), recoloured; Twemoji graphics © Twitter, Inc and other contributors, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 - Sample song `public/demo/greensleeves.mid`: Greensleeves (Traditional), arranged for accordion by Ralf Axel Gehlert, [Mutopia Project #1265](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1265), public domain
