@@ -1153,3 +1153,12 @@ if (import.meta.env.DEV) {
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+// The installed app on a phone: Chrome leaves a camera cutout's strip blank (white) in a full
+// screen app and only draws under it in the Fullscreen API's full screen, which needs a gesture:
+// any touch asks for it.
+if (matchMedia('(display-mode: fullscreen)').matches && navigator.maxTouchPoints > 0) {
+  window.addEventListener('pointerdown', () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+  });
+}
