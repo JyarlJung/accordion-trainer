@@ -2,7 +2,7 @@
 // The page itself is fetched fresh whenever there's a network, so a new release shows up on the
 // next start; everything else (built assets with hashed names, the SoundFont, the sample song)
 // comes from the cache first and is stored the first time it's fetched.
-const CACHE = 'accordion-trainer-v1';
+const CACHE = 'accordion-trainer-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
