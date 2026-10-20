@@ -21,12 +21,7 @@ html, body {
 /* The board keeps a workable size: below 1280 px wide or with too little height the page scrolls
    instead of squeezing the boards and panels; on a tall screen it stops at 4:5 (height to width),
    since a longer roll leans its lanes off the sides and shrinks the boards. */
-/* The padding keeps clear of a camera cutout and the gesture bar, which the page runs under
-   (viewport-fit=cover). */
-body {
-  display: flex; flex-direction: column; min-width: 1280px;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-}
+body { display: flex; flex-direction: column; min-width: 1280px; }
 
 header {
   background: var(--panel);
