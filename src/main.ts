@@ -54,6 +54,7 @@ const ui = {
   bassChromatic: $<HTMLInputElement>('bassChromatic'),
   rowGap: $<HTMLInputElement>('rowGap'),
   hitWindow: $<HTMLInputElement>('hitWindow'),
+  chordNeed: $<HTMLSelectElement>('chordNeed'),
   hitWindowLabel: $('hitWindowLabel'),
   latency: $<HTMLInputElement>('latency'),
   latencyLabel: $('latencyLabel'),
@@ -177,6 +178,7 @@ function rebuild(t = transport.time): void {
   others.notes = extractOthers(song, options);
   judge = new Judge(treble.notes, n => layout.playable(n));
   judge.windowSec = hitWindow();
+  judge.need = chordNeed();
   bassJudge = new BassJudge(bass.notes, bassLayout);
   transport.duration = song.duration;
   makeClicks();
@@ -597,6 +599,18 @@ function applyHitWindow(): void {
 }
 ui.hitWindow.oninput = applyHitWindow;
 
+// How many notes of a right-hand chord practice mode needs played (see Judge.need).
+function chordNeed(): number | null {
+  return ui.chordNeed.value ? Number(ui.chordNeed.value) : null;
+}
+function applyChordNeed(): void {
+  judge.need = chordNeed();
+  // Chords already counted are looked at again with the new number.
+  judge.resetFrom(transport.time);
+  waiter.reset();
+}
+ui.chordNeed.addEventListener('change', applyChordNeed);
+
 // The instrument's input delay, ms on the slider: a press is judged at the moment it was played,
 // that long before it arrived.
 function latency(): number {
@@ -826,6 +840,7 @@ ui.midiIn.onchange = () => {
 // Restore the remembered settings (song-specific options are left out on purpose).
 persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.hitWindow, 'hitWindow', applyHitWindow);
+persist(ui.chordNeed, 'chordNeed', applyChordNeed);
 persist(ui.latency, 'latency', applyLatency);
 persist(ui.metronome, 'metronomeLevel');
 persist(ui.metronomeUnit, 'metronomeUnit', makeClicks);
@@ -934,14 +949,12 @@ function waited(): Waited[] {
   return [...(ui.practiceRight.checked ? [judge] : []), ...(ui.practiceBass.checked ? [bassJudge] : [])];
 }
 
-// Everything due at a time, in the parts practised, held down now: each right-hand note's key, a
-// button for each bass note, the button of each chord.
+// Everything due at a time, in the parts practised, held down now: the right-hand chord's keys (as many
+// as it needs), a button for each bass note, the button of each chord.
 waiter.allHeld = time => {
   if (ui.practiceRight.checked) {
-    for (const n of treble.notes) {
-      if (n.time > time + CHORD_EPS) break;
-      if (Math.abs(n.time - time) < CHORD_EPS && judge.state[n.id] !== 'skipped' && !midi.held.right.has(n.note)) return false;
-    }
+    const c = judge.chords.find(c => Math.abs(c.time - time) < CHORD_EPS);
+    if (c && c.ids.filter(id => judge.state[id] !== 'skipped' && midi.held.right.has(treble.notes[id].note)).length < judge.needOf(c)) return false;
   }
   if (ui.practiceBass.checked) {
     const pcs = new Set([...midi.held.bass.keys()].map(n => n % 12));
