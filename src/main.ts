@@ -35,6 +35,7 @@ const ui = {
   time: $('time'),
   rate: $<HTMLInputElement>('rate'),
   rateLabel: $('rateLabel'),
+  rateUnit: $<HTMLSelectElement>('rateUnit'),
   loopA: $<HTMLButtonElement>('loopA'),
   loopB: $<HTMLButtonElement>('loopB'),
   practiceRight: $<HTMLInputElement>('practiceRight'), // practice (wait) mode for the right hand
@@ -144,6 +145,7 @@ function setSong(s: Song): void {
   trackVolumes.clear();
   mutedTracks.clear();
   trackOctaves.clear();
+  applyRateUnit(); // the BPM steps follow the song's tempo
   ui.songName.textContent = s.name;
   ui.songName.title = s.name;
   ui.transpose.value = String(options.transpose);
@@ -547,8 +549,27 @@ window.addEventListener('pointerup', () => {
 });
 ui.rate.oninput = () => {
   transport.rate = Number(ui.rate.value);
-  ui.rateLabel.textContent = `${Math.round(transport.rate * 100)}%`;
+  ui.rateLabel.textContent = bpmMode() ? `${Math.round(song!.bpm * transport.rate)} BPM` : `${Math.round(transport.rate * 100)}%`;
 };
+
+// The speed in percent, in steps of 5%, or in BPM: the song's first tempo times the speed, in
+// steps of 4 BPM counted from the song's own tempo so that 100% stays on the slider. Either way the
+// slider runs from 25% to 150%.
+function bpmMode(): boolean {
+  return ui.rateUnit.value === 'bpm' && song !== null;
+}
+function rateStep(): number {
+  return bpmMode() ? 4 / song!.bpm : 0.05;
+}
+function applyRateUnit(): void {
+  const s = rateStep();
+  ui.rate.step = String(s);
+  // A hair past the last step, so float error can't leave that step off the slider.
+  ui.rate.min = String(1 - Math.floor(0.75 / s + 1e-9) * s);
+  ui.rate.max = String(1 + Math.floor(0.5 / s + 1e-9) * s + 1e-9);
+  setRate(transport.rate);
+}
+ui.rateUnit.addEventListener('change', applyRateUnit);
 // Loop points snap to bars: A to the start of the bar it's in, B to the end of its bar.
 function loopGrid(): number[] {
   return song?.bars ?? [];
@@ -661,13 +682,16 @@ function barStep(t: number, dir: -1 | 1): number {
   return t < firstBeatEnd ? (bars[i - 1] ?? 0) : bars[i];
 }
 
+// Sets the speed, on the slider's steps.
 function setRate(rate: number): void {
-  ui.rate.value = String(Math.min(Number(ui.rate.max), Math.max(Number(ui.rate.min), Math.round(rate * 100) / 100)));
+  const min = Number(ui.rate.min), s = rateStep();
+  const snapped = min + Math.round((rate - min) / s) * s;
+  ui.rate.value = String(Math.min(Number(ui.rate.max), Math.max(min, snapped)));
   ui.rate.dispatchEvent(new Event('input'));
 }
 
 // Space plays and pauses, Home goes back to the start (or the loop's), the left and right
-// arrows move by bars, the up and down arrows change the speed by 5%.
+// arrows move by bars, the up and down arrows change the speed a step (5% or 4 BPM).
 window.addEventListener('keydown', e => {
   if (e.target instanceof HTMLInputElement && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
   if (e.target instanceof HTMLSelectElement || e.ctrlKey || e.altKey || e.metaKey) return;
@@ -676,8 +700,8 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space') togglePlay();
   else if (e.code === 'ArrowLeft') seek(barStep(transport.time, -1));
   else if (e.code === 'ArrowRight') seek(barStep(transport.time, 1));
-  else if (e.code === 'ArrowUp') setRate(transport.rate + 0.05);
-  else if (e.code === 'ArrowDown') setRate(transport.rate - 0.05);
+  else if (e.code === 'ArrowUp') setRate(transport.rate + rateStep());
+  else if (e.code === 'ArrowDown') setRate(transport.rate - rateStep());
   else if (e.code === 'Home') seek(loop?.a ?? 0);
 });
 
@@ -845,6 +869,7 @@ ui.midiIn.onchange = () => {
 persist(ui.rowGap, 'rowGap', applyRowGap);
 persist(ui.hitWindow, 'hitWindow', applyHitWindow);
 persist(ui.chordNeed, 'chordNeed', applyChordNeed);
+persist(ui.rateUnit, 'rateUnit', applyRateUnit);
 persist(ui.latency, 'latency', applyLatency);
 persist(ui.metronome, 'metronomeLevel');
 persist(ui.metronomeUnit, 'metronomeUnit', makeClicks);

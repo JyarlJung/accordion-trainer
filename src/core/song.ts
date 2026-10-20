@@ -30,6 +30,7 @@ export interface Song {
   bars: number[]; // start time of every bar, seconds
   beats: number[]; // start time of every beat, seconds
   firstBar: number; // MIDI bar number of bars[0] (bars before it may have been trimmed)
+  bpm: number; // the first tempo, quarter notes per minute
 }
 
 export interface Cut {
@@ -91,7 +92,8 @@ export function parseSong(data: ArrayBuffer, name: string): Song {
     tracks.push(trackInfo(index, decodeText(t.name).trim() || t.instrument.name, t.channel + 1, own));
   });
   const { firstBarEnd, ...grid } = beatGrid(midi);
-  return fitLeadIn({ name, duration: midi.duration, tracks, notes: sortNotes(notes), firstBar: 1, ...grid }, firstBarEnd);
+  const bpm = [...midi.header.tempos].sort((a, b) => a.ticks - b.ticks)[0]?.bpm ?? 120;
+  return fitLeadIn({ name, duration: midi.duration, tracks, notes: sortNotes(notes), firstBar: 1, bpm, ...grid }, firstBarEnd);
 }
 
 type MidiNote = Midi['tracks'][number]['notes'][number];
