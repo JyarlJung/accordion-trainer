@@ -2,12 +2,12 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <script>
       // The layout needs 1280 px across. A smaller screen (a phone) lays the page out that wide and
       // scales it down to fit, so the page's height is the screen's too instead of a fixed minimum.
       if (Math.max(screen.width, screen.height) < 1280)
-        document.querySelector('meta[name=viewport]').content = 'width=1280';
+        document.querySelector('meta[name=viewport]').content = 'width=1280, viewport-fit=cover';
     </script>
     <title>Accordion Trainer</title>
     <meta name="theme-color" content="#1f1f26" />
