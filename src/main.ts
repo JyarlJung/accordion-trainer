@@ -649,12 +649,16 @@ if (!navigator.userAgent.includes('Electron')) {
   });
 }
 
-// The bar start before t (a bar back when t is on one) or after it; the song's ends past the
-// first and last bars.
+// The bar start before t, or after it; the song's ends past the first and last bars. Going back
+// from within a bar's first beat goes to the bar before, so pressing again while it plays keeps
+// going back instead of landing on the same bar start.
 function barStep(t: number, dir: -1 | 1): number {
   const bars = song?.bars ?? [];
-  if (dir < 0) return bars.filter(b => b < t - 0.05).pop() ?? 0;
-  return bars.find(b => b > t + 0.05) ?? transport.duration;
+  if (dir > 0) return bars.find(b => b > t + 0.05) ?? transport.duration;
+  const i = bars.filter(b => b <= t + 0.05).length - 1; // the bar t is in
+  if (i < 0) return 0;
+  const firstBeatEnd = song?.beats.find(b => b > bars[i] + 1e-3) ?? Infinity;
+  return t < firstBeatEnd ? (bars[i - 1] ?? 0) : bars[i];
 }
 
 function setRate(rate: number): void {
