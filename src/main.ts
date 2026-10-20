@@ -8,7 +8,7 @@ import { Layout, noteName, type LayoutDef } from './core/layout';
 import { CHORD_EPS, defaultOptions, extractBass, extractNotes, extractOthers, parseSong, type BassNote, type ExtractOptions, type Song, type SongNote } from './core/song';
 import { Transport } from './core/transport';
 import { Judge } from './core/judge';
-import { WaitMode, pressInWaitMode, type Waited } from './core/practice';
+import { WaitMode, type Waited } from './core/practice';
 import { BassJudge, type BassTarget } from './core/bassJudge';
 import { MidiIO, type Part } from './io/midi';
 import { PartPlayer, type Route } from './io/player';
@@ -177,19 +177,18 @@ function rebuild(t = transport.time): void {
   judge = new Judge(treble.notes, n => layout.playable(n));
   judge.windowSec = hitWindow();
   bassJudge = new BassJudge(bass.notes, bassLayout);
-  bassJudge.windowSec = hitWindow();
   transport.duration = song.duration;
   makeClicks();
-  seek(t, true);
+  seek(t);
 }
 
-function seek(t: number, resetStats = false): void {
+function seek(t: number): void {
   transport.seek(t);
   silence();
   treble.seek(transport.time);
   bass.seek(transport.time);
   others.seek(transport.time);
-  judge.resetFrom(transport.time, resetStats);
+  judge.resetFrom(transport.time);
   bassJudge.resetFrom(transport.time);
   waiter.reset();
   hitKeys.clear();
@@ -519,11 +518,11 @@ function applyLoop(): void {
   loop = loopA !== null && loopB !== null && loopA < loopB ? { a: loopA, b: loopB } : null;
   ui.loopA.classList.toggle('active', loopA !== null);
   ui.loopB.classList.toggle('active', loopB !== null);
-  if (loop && !had) seek(loop.a, true);
+  if (loop && !had) seek(loop.a);
 }
 
 ui.play.onclick = togglePlay;
-ui.seek.oninput = () => seek((Number(ui.seek.value) / 1000) * transport.duration, true);
+ui.seek.oninput = () => seek((Number(ui.seek.value) / 1000) * transport.duration);
 // The frame loop moves the seek bar except while the user is dragging it. (Checking focus
 // instead left the bar frozen after any click, since a clicked range input keeps focus.)
 let draggingSeek = false;
@@ -584,7 +583,7 @@ function hitWindow(): number {
 }
 function applyHitWindow(): void {
   judge.windowSec = hitWindow();
-  bassJudge.windowSec = hitWindow();
+  waiter.windowSec = hitWindow();
   ui.hitWindowLabel.textContent = `${ui.hitWindow.value}ms`;
 }
 ui.hitWindow.oninput = applyHitWindow;
@@ -652,7 +651,7 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'ArrowRight') seek(barStep(transport.time, 1));
   else if (e.code === 'ArrowUp') setRate(transport.rate + 0.05);
   else if (e.code === 'ArrowDown') setRate(transport.rate - 0.05);
-  else if (e.code === 'Home') seek(loop?.a ?? 0, true);
+  else if (e.code === 'Home') seek(loop?.a ?? 0);
 });
 
 // ---------- MIDI devices ----------
@@ -851,7 +850,7 @@ for (const box of [ui.practiceRight, ui.practiceBass]) {
     applyPractice();
     silence(); // play-by-my-keys and the parts' sounds change hands
     // A part switched on mid-song mustn't pull the clock back to what already went by.
-    judge.resetFrom(transport.time, false);
+    judge.resetFrom(transport.time);
     bassJudge.resetFrom(transport.time);
     waiter.reset();
   });
@@ -954,11 +953,10 @@ waiter.allHeld = time => {
 // over once they make it.
 function bassPress(part: Part, note: number): void {
   if (!ui.practiceBass.checked) return;
-  const rate = transport.rate;
   const follow = followBass();
   if (follow) startSound();
   if (part === 'bass') {
-    const result = pressInWaitMode(waited(), transport, latency(), t => bassJudge.onBass(note, t, rate));
+    const result = waiter.press(waited(), transport, t => bassJudge.onBass(note, t));
     if (!follow) return;
     const taken = result === 'hit' && bassJudge.lastHit ? takeOver(bassJudge.lastHit) : [];
     holdKey(part, note, taken.length ? taken : [playFree(part, note)]);
@@ -967,7 +965,7 @@ function bassPress(part: Part, note: number): void {
   if (follow) holdKey(part, note, [playFree(part, note)]);
   const chord = bassLayout.forChord(midi.held.chord.keys());
   if (!chord) return;
-  const result = pressInWaitMode(waited(), transport, latency(), t => bassJudge.onChord(chord.row, chord.root, t, rate));
+  const result = waiter.press(waited(), transport, t => bassJudge.onChord(chord.row, chord.root, t));
   if (!follow || result !== 'hit' || !bassJudge.lastHit) return;
   // The keys' own sounds go first. They can share pitch and channel with the chord's song notes,
   // and stopping them stops those too, so the song notes start again.
@@ -991,7 +989,7 @@ function judgePress(note: number): void {
   const waitMode = ui.practiceRight.checked;
   const wasWaiting = transport.waiting;
   const result = waitMode
-    ? pressInWaitMode(waited(), transport, latency(), t => judge.onNoteOn(note, t, transport.rate))
+    ? waiter.press(waited(), transport, t => judge.strike(note, t))
     : judge.onNoteOn(note, transport.time - latency() * transport.rate, transport.rate);
   stage.flash(note, result);
   if (waitMode && result === 'hit' && judge.lastHit !== null) hitKeys.set(note, judge.lastHit);
@@ -1082,8 +1080,8 @@ function showError(e: unknown): void {
 function step(now: number): void {
   const waitMode = practicing();
   if (waitMode) {
-    // A missed chord falls silent, bass included, and both parts play on from it once it's
-    // played right.
+    // A chord missed or played wrong falls silent, bass included, and both parts play on from it
+    // once it's played right.
     if (waiter.tick(waited(), transport, now)) {
       treble.release();
       treble.seek(transport.time);
@@ -1118,9 +1116,6 @@ function step(now: number): void {
     bass.update(t, transport.playing);
     others.update(t, transport.playing);
   }
-  // Notes count as missed only once a press played in time could no longer still be arriving.
-  // (A right hand not practised is judged as in play mode.)
-  if (!ui.practiceRight.checked && transport.playing) judge.update(t - latency() * transport.rate, transport.rate);
 
   drawStage();
 

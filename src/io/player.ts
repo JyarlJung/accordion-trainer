@@ -48,6 +48,7 @@ export class PartPlayer<T extends SongNote = SongNote> {
 
   play(n: T): void {
     const r = this.route(n);
+    if (this.sounding.has(n.id)) r.sink.noteOff(n.note, r.channel); // starting it again restarts it
     r.sink.noteOn(n.note, n.velocity, r.channel);
     this.sounding.set(n.id, n);
   }

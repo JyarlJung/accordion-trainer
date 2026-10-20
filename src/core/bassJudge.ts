@@ -16,7 +16,6 @@ const EPS = 1e-6;
 // bass start together both have to be played. Chord tones count as one chord button; tones that
 // don't make a chord the board has aren't asked for.
 export class BassJudge {
-  windowSec = 0.12;
   lastHit: BassTarget | null = null; // the target matched by the latest 'hit'
   private readonly targets: BassTarget[] = [];
   private readonly done: boolean[] = [];
@@ -56,32 +55,26 @@ export class BassJudge {
 
   // What's due at song time t.
   targetsAt(t: number): BassTarget[] {
-    return this.targets.filter(g => Math.abs(g.time - t) < EPS);
+    return this.targets.filter(g => Math.abs(g.time - t) < CHORD_EPS);
   }
 
-  // A bass button (fundamental or counter-bass) sounding `note`, played at song time t.
-  onBass(note: number, t: number, rate: number): HitResult {
-    return this.match(t, rate, g => g.chord === null && g.pc === ((note % 12) + 12) % 12);
+  // A bass button (fundamental or counter-bass) sounding `note`, against what's due at `time`.
+  onBass(note: number, time: number): HitResult {
+    return this.match(time, g => g.chord === null && g.pc === ((note % 12) + 12) % 12);
   }
 
-  // A chord button (row and root) played at song time t.
-  onChord(row: string, root: number, t: number, rate: number): HitResult {
-    return this.match(t, rate, g => g.chord === row && g.pc === root);
+  // A chord button (row and root), against what's due at `time`.
+  onChord(row: string, root: number, time: number): HitResult {
+    return this.match(time, g => g.chord === row && g.pc === root);
   }
 
-  private match(t: number, rate: number, fits: (g: BassTarget) => boolean): HitResult {
+  // A target already played counts again, so it can be pressed again to hold the chord together.
+  private match(time: number, fits: (g: BassTarget) => boolean): HitResult {
     if (this.targets.length === 0) return 'free';
-    const win = this.windowSec * rate + EPS;
-    let best = -1;
-    for (let i = 0; i < this.targets.length; i++) {
-      const g = this.targets[i];
-      if (g.time > t + win) break;
-      if (this.done[i] || g.time < t - win || !fits(g)) continue;
-      if (best < 0 || Math.abs(g.time - t) < Math.abs(this.targets[best].time - t)) best = i;
-    }
-    if (best < 0) return 'wrong';
-    this.done[best] = true;
-    this.lastHit = this.targets[best];
+    const i = this.targets.findIndex(g => Math.abs(g.time - time) < CHORD_EPS && fits(g));
+    if (i < 0) return 'wrong';
+    this.done[i] = true;
+    this.lastHit = this.targets[i];
     return 'hit';
   }
 }
