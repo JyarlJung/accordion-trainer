@@ -113,7 +113,7 @@ header {
 }
 
 .muted { color: var(--muted); }
-.mono { font-variant-numeric: tabular-nums; }
+.mono { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
 
