@@ -28,7 +28,6 @@ const ui = {
   trackRows: $('trackRows'),
   parts: $('parts'),
   transpose: $<HTMLSelectElement>('transpose'),
-  bassOctave: $<HTMLSelectElement>('bassOctave'),
   settingsBtn: $<HTMLButtonElement>('settingsBtn'),
   settings: $('settings'),
   play: $<HTMLButtonElement>('play'),
@@ -120,6 +119,7 @@ const inputHeld = new Map<string, Sound[]>();
 const trackVoices = new Map<number, string>(); // track index -> voice, for the current song
 const trackVolumes = new Map<number, number>(); // track index -> volume 0..1, for the current song
 const mutedTracks = new Set<number>(); // tracks silenced without losing their volume, for the current song
+const trackOctaves = new Map<number, number>(); // track index -> octaves up or down, for the current song
 const DEFAULT_VOLUME = 0.8;
 // A voice per part and track: the part sets the MIDI channel, the track the sound and volume.
 // Track -1 is the player's own presses that match no song note.
@@ -142,6 +142,7 @@ function setSong(s: Song): void {
   trackVoices.clear();
   trackVolumes.clear();
   mutedTracks.clear();
+  trackOctaves.clear();
   ui.songName.textContent = s.name;
   ui.songName.title = s.name;
   ui.transpose.value = String(options.transpose);
@@ -240,6 +241,14 @@ function renderTracks(): void {
       trackVoices.set(t.index, voice.value);
       syncVoices();
     };
+    const octave = document.createElement('select');
+    octave.title = tr('tracks.octave.tip');
+    for (const o of [2, 1, 0, -1, -2]) octave.add(new Option(o > 0 ? `+${o}` : String(o), String(o)));
+    octave.value = String(octaveOf(t.index));
+    octave.onchange = () => {
+      trackOctaves.set(t.index, Number(octave.value));
+      applyOctaves();
+    };
     const volume = document.createElement('input');
     volume.type = 'range';
     volume.min = '0';
@@ -263,7 +272,7 @@ function renderTracks(): void {
       else mutedTracks.delete(t.index);
       applyVolumes();
     };
-    row.append(name, voice, volume, mute, pick('tracks', tr('tracks.right.tip')), pick('bassTracks', tr('tracks.bass.tip')));
+    row.append(name, voice, octave, volume, mute, pick('tracks', tr('tracks.right.tip')), pick('bassTracks', tr('tracks.bass.tip')));
     ui.trackRows.append(row);
   }
 }
@@ -685,17 +694,15 @@ function refreshPorts(): void {
   syncVoices();
 }
 
-// The bass octave: the bass and chord parts sound this many octaves up or down (as played back and
-// as played by the player's keys); the board and roll don't move.
-function bassShift(part: VoicePart): number {
-  return part === 'bass' || part === 'chord' ? 12 * Number(ui.bassOctave.value) : 0;
+// Each track can sound octaves up or down, in whichever part its notes play (as played back and as
+// played by the player's keys); the board and roll don't move.
+function octaveOf(track: number): number {
+  return trackOctaves.get(track) ?? 0;
 }
-function applyBassOctave(): void {
+function applyOctaves(): void {
   silence(); // notes sounding were started at the old octave
-  for (const { part, voice } of voices.values()) voice.transpose = bassShift(part);
+  for (const { track, voice } of voices.values()) voice.transpose = 12 * octaveOf(track);
 }
-ui.bassOctave.addEventListener('change', applyBassOctave);
-persist(ui.bassOctave, 'bassOctave');
 
 function applyRightLayout(): void {
   layout = layouts[ui.rightLayout.value] ?? layouts.c;
@@ -791,7 +798,7 @@ function voiceOf(part: VoicePart, track: number): PartVoice {
   let entry = voices.get(key);
   if (!entry) {
     entry = { part, track, voice: new PartVoice(midi, () => channelOf(part, track)) };
-    entry.voice.transpose = bassShift(part);
+    entry.voice.transpose = 12 * octaveOf(track);
     voices.set(key, entry);
   }
   const want = wantedVoice(track);

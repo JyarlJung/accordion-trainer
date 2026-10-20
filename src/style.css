@@ -140,7 +140,7 @@ button.active { outline: 2px solid #ffd54f; }
 @keyframes swing-fade { from { opacity: 0.6; } to { opacity: 0; } }
 #midiIn, #defaultVoice { max-width: 200px; }
 
-main { flex: 1; min-height: 520px; max-height: max(80vw, 1024px); position: relative; }
+main { flex: 1; min-height: 400px; max-height: max(80vw, 1024px); position: relative; }
 
 /* Track table beside the bass roll; main.ts sets its box from the board layout. */
 #parts {
@@ -155,7 +155,7 @@ main { flex: 1; min-height: 520px; max-height: max(80vw, 1024px); position: rela
   font-size: 12px;
   overflow: hidden;
 }
-.track-head, .track-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 96px 24px 24px 24px; align-items: center; gap: 4px; }
+.track-head, .track-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 48px 80px 24px 24px 24px; align-items: center; gap: 4px; }
 /* The part columns in the colours of their notes: violet for the treble, teal for the bass. */
 .head-icon { display: inline-flex; }
 .head-treble, .head-bass { font-weight: 700; }
