@@ -15,7 +15,7 @@ import { PartPlayer, type Route } from './io/player';
 import { engine, ITALIAN_ACCORDION, presetValue, STANDARD_DRUMS } from './io/synth';
 import { PartVoice } from './io/voice';
 import { getPref, persist, resetPrefs, setPref } from './io/prefs';
-import { setLang, systemLang, t as tr } from './i18n';
+import { setLang, systemLang, t as tr, type Key } from './i18n';
 import type { Geometry } from './view/geometry';
 import { Metronome, type Click } from './io/metronome';
 import { BeatSwing } from './view/beatSwing';
@@ -788,15 +788,37 @@ ui.rightLayout.addEventListener('change', applyRightLayout);
 
 // Each track picks its own sound: a preset of the SoundFont (Italian Accordion by default, a drum
 // kit for a drum track) or a MIDI output. (State at the top.)
-function voiceChoices(): { label: string; value: string }[] {
-  return [
-    ...engine.presets.map(p => ({ label: p.drum ? tr('drumPrefix') + p.name : p.name, value: presetValue(p) })),
-    ...midi.outputs().map(p => ({ label: `MIDI: ${p.name}`, value: `midi:${p.id}` })),
-  ];
+function voiceValues(): string[] {
+  return [...engine.presets.map(presetValue), ...midi.outputs().map(p => `midi:${p.id}`)];
 }
 
-function fillVoiceOptions(select: HTMLSelectElement): void {
-  for (const c of voiceChoices()) select.append(new Option(c.label, c.value));
+// GM's sixteen families of eight programs, which head the voice lists.
+const FAMILIES: Key[] = [
+  'voices.piano', 'voices.chromatic', 'voices.organ', 'voices.guitar', 'voices.bass', 'voices.strings',
+  'voices.ensemble', 'voices.brass', 'voices.reed', 'voices.pipe', 'voices.synthLead', 'voices.synthPad',
+  'voices.synthFx', 'voices.ethnic', 'voices.percussive', 'voices.sfx',
+];
+// The voices grouped by family, then drum kits and MIDI outputs. A SoundFont's own variations of a
+// GM program (other banks) follow it, marked with a dot.
+function fillVoiceOptions(select: HTMLSelectElement, drums = true): void {
+  const groups = new Map<string, HTMLOptGroupElement>();
+  const group = (key: Key) => {
+    let g = groups.get(key);
+    if (!g) {
+      g = document.createElement('optgroup');
+      g.label = tr(key);
+      groups.set(key, g);
+      select.append(g);
+    }
+    return g;
+  };
+  for (const p of engine.presets) {
+    if (p.drum && !drums) continue;
+    const variant = !p.drum && (p.bankMSB !== 0 || p.bankLSB !== 0);
+    group(p.drum ? 'voices.drums' : FAMILIES[p.program >> 3])
+      .append(new Option(variant ? `· ${p.name}` : p.name, presetValue(p)));
+  }
+  for (const p of midi.outputs()) group('voices.midi').append(new Option(p.name, `midi:${p.id}`));
 }
 
 const isDrumTrack = (track: number) => song?.tracks.find(t => t.index === track)?.channel === 10;
@@ -806,13 +828,13 @@ const isDrumTrack = (track: number) => song?.tracks.find(t => t.index === track)
 const defaultVoiceSelect = $<HTMLSelectElement>('defaultVoice');
 function defaultVoice(): string {
   const v = defaultVoiceSelect.value || getPref('defaultVoice');
-  return typeof v === 'string' && voiceChoices().some(c => c.value === v) ? v : ITALIAN_ACCORDION;
+  return typeof v === 'string' && voiceValues().includes(v) ? v : ITALIAN_ACCORDION;
 }
 // Fills the choice from the voices there are (they come with the SoundFont and the MIDI ports).
 function fillDefaultVoice(): void {
   const saved = getPref('defaultVoice');
   defaultVoiceSelect.replaceChildren();
-  for (const c of voiceChoices()) if (!c.value.startsWith('sf:drum:')) defaultVoiceSelect.append(new Option(c.label, c.value));
+  fillVoiceOptions(defaultVoiceSelect, false);
   const has = (v: unknown) => [...defaultVoiceSelect.options].some(o => o.value === v);
   defaultVoiceSelect.value = has(saved) ? (saved as string) : ITALIAN_ACCORDION;
 }
@@ -826,7 +848,7 @@ defaultVoiceSelect.addEventListener('change', () => {
 // the default.
 function wantedVoice(track: number): string {
   const v = trackVoices.get(track);
-  if (v && voiceChoices().some(c => c.value === v)) return v;
+  if (v && voiceValues().includes(v)) return v;
   return isDrumTrack(track) ? STANDARD_DRUMS : defaultVoice();
 }
 
